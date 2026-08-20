@@ -18,29 +18,29 @@
   /* ---------- App chrome ---------- */
   .app-header{display:flex;align-items:center;gap:14px;padding:10px 18px;background:var(--dark);color:#fff}
   .app-header img{width:44px;height:44px;border-radius:6px;background:#fff}
-  .app-header h1{font-size:18px;margin:0;font-weight:bold;letter-spacing:.3px}
+  .app-header h1{font-size:22.5px;margin:0;font-weight:bold;letter-spacing:.3px}
   .app-header h1 span{color:#ffd23f;font-weight:normal}
-  .app-header .sub{margin-left:auto;font-size:12px;color:#cfcfcf;text-align:right}
+  .app-header .sub{margin-left:auto;font-size:15px;color:#cfcfcf;text-align:right}
 
   .toolbar{display:flex;flex-wrap:wrap;gap:8px;align-items:center;padding:12px 18px;background:#fff;border-bottom:1px solid var(--line);position:sticky;top:0;z-index:5}
-  .toolbar input[type=search]{flex:1 1 260px;min-width:200px;padding:8px 10px;border:1px solid #bbb;border-radius:6px;font-size:14px}
-  .toolbar select,.toolbar input[type=date]{padding:7px 8px;border:1px solid #bbb;border-radius:6px;font-size:13px;background:#fff}
-  .toolbar label{font-size:12px;color:var(--muted)}
-  .toolbar button{padding:7px 12px;border:1px solid #bbb;border-radius:6px;background:#fff;cursor:pointer;font-size:13px}
+  .toolbar input[type=search]{flex:1 1 260px;min-width:200px;padding:8px 10px;border:1px solid #bbb;border-radius:6px;font-size:17.5px}
+  .toolbar select,.toolbar input[type=date]{padding:7px 8px;border:1px solid #bbb;border-radius:6px;font-size:16.25px;background:#fff}
+  .toolbar label{font-size:15px;color:var(--muted)}
+  .toolbar button{padding:7px 12px;border:1px solid #bbb;border-radius:6px;background:#fff;cursor:pointer;font-size:16.25px}
   .toolbar button:hover{background:#f0f0f0}
 
-  .summary{padding:8px 18px;font-size:12.5px;color:var(--muted);display:flex;gap:18px;flex-wrap:wrap}
+  .summary{padding:8px 18px;font-size:15.62px;color:var(--muted);display:flex;gap:18px;flex-wrap:wrap}
   .summary b{color:#1c1c1c}
 
   .list-wrap{padding:0 18px 18px;overflow-x:auto}
-  table.list{width:100%;border-collapse:collapse;background:#fff;font-size:13px;box-shadow:0 1px 3px rgba(0,0,0,.12)}
-  table.list th{background:var(--dark);color:#fff;text-align:left;padding:8px 8px;font-size:12px;white-space:nowrap;cursor:pointer;user-select:none;position:sticky;top:0}
-  table.list th .arr{opacity:.9;font-size:10px}
+  table.list{width:100%;border-collapse:collapse;background:#fff;font-size:16.25px;box-shadow:0 1px 3px rgba(0,0,0,.12)}
+  table.list th{background:var(--dark);color:#fff;text-align:left;padding:8px 8px;font-size:15px;white-space:nowrap;cursor:pointer;user-select:none;position:sticky;top:0}
+  table.list th .arr{opacity:.9;font-size:12.5px}
   table.list td{padding:7px 8px;border-bottom:1px solid #eee;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:260px}
   table.list tbody tr{cursor:pointer}
   table.list tbody tr:hover{background:#eef2ff}
   td.r,th.r{text-align:right}
-  .badge{display:inline-block;padding:1px 7px;border-radius:9px;font-size:11px;font-weight:bold}
+  .badge{display:inline-block;padding:1px 7px;border-radius:9px;font-size:13.75px;font-weight:bold}
   .badge.I{background:#e3ecff;color:#1d3fa0}.badge.Q{background:#fff3d6;color:#8a6100}.badge.Cq{background:#ffe2e2;color:#a11}
   .badge.sC{background:#e2f5e5;color:#1c7a2d}.badge.sO{background:#ffe9d6;color:#9a4d00}.badge.sP{background:#eee;color:#555}
   .pos{color:#a11212;font-weight:bold}
@@ -48,16 +48,16 @@
   .pager{display:flex;gap:6px;align-items:center;justify-content:center;padding:14px}
   .pager button{padding:6px 12px;border:1px solid #bbb;background:#fff;border-radius:6px;cursor:pointer}
   .pager button:disabled{opacity:.4;cursor:default}
-  .pager .pg{font-size:13px;color:var(--muted);margin:0 8px}
-  .empty{padding:40px;text-align:center;color:var(--muted);font-size:15px}
+  .pager .pg{font-size:16.25px;color:var(--muted);margin:0 8px}
+  .empty{padding:40px;text-align:center;color:var(--muted);font-size:18.75px}
 
   /* ---------- Invoice view chrome ---------- */
   .inv-toolbar{display:flex;gap:8px;align-items:center;padding:10px 18px;background:#fff;border-bottom:1px solid var(--line);position:sticky;top:0;z-index:5}
-  .inv-toolbar button{padding:8px 14px;border:1px solid #bbb;border-radius:6px;background:#fff;cursor:pointer;font-size:13px}
+  .inv-toolbar button{padding:8px 14px;border:1px solid #bbb;border-radius:6px;background:#fff;cursor:pointer;font-size:16.25px}
   .inv-toolbar button:hover{background:#f0f0f0}
   .inv-toolbar .print{background:var(--brand-blue);border-color:var(--brand-blue);color:#fff;font-weight:bold}
   .inv-toolbar .print:hover{background:#1f2c73}
-  .inv-toolbar .nav-pos{margin-left:auto;font-size:12px;color:var(--muted)}
+  .inv-toolbar .nav-pos{margin-left:auto;font-size:15px;color:var(--muted)}
 
   /* ---------- Invoice sheet (mirrors the sample PDF, A4 = 595pt wide) ---------- */
   .sheet-holder{padding:20px 0 40px}
@@ -116,8 +116,8 @@
     .no-print{display:none !important}
     #listView{display:none !important}
     .sheet-holder{padding:0}
-    .sheet{box-shadow:none;margin:0;width:auto;min-height:auto;padding-bottom:10pt}
-    .sheet .pageno{position:static;text-align:right;padding-right:8pt;margin-top:14pt}
+    .sheet{box-shadow:none;margin:0;width:auto;min-height:auto;padding-bottom:6pt}
+    .sheet .pageno{bottom:2pt}
     .company-band,.panel,table.items thead th{-webkit-print-color-adjust:exact;print-color-adjust:exact}
     table.items thead{display:table-header-group}
     table.items tr.sectotal,table.items tr.sec{page-break-inside:avoid}
@@ -440,8 +440,8 @@ function renderInvoice(v){
     const sheet = $('#sheet');
     const onePageCSSpx = 842 * 96 / 72 - 4;           // A4 height in CSS px
     const notesEl = sheet.querySelector('.foot-notes');
-    const padBottom = parseFloat(getComputedStyle(sheet).paddingBottom) || 0;
-    const contentH = notesEl.getBoundingClientRect().bottom - sheet.getBoundingClientRect().top + padBottom;
+    const printPadBottom = 8;  // 6pt print padding, in CSS px
+    const contentH = notesEl.getBoundingClientRect().bottom - sheet.getBoundingClientRect().top + printPadBottom;
     sheet.querySelector('.pageno').textContent = contentH <= onePageCSSpx ? 'Page 1 of 1' : '';
   });
 
