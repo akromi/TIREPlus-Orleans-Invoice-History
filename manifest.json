@@ -1,0 +1,12 @@
+{
+  "name": "TIREPlus Orleans Invoice History",
+  "short_name": "TIREPlus Invoices",
+  "description": "Browse and print TIREPlus Orleans invoice history as PDF.",
+  "start_url": "./index.html",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#383535",
+  "icons": [
+    { "src": "assets/logo.png", "sizes": "300x300", "type": "image/png" }
+  ]
+}

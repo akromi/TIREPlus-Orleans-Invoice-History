@@ -1,0 +1,527 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>TIREPlus Orleans — Invoice History</title>
+<link rel="icon" href="assets/logo.png">
+<link rel="manifest" href="manifest.json">
+<style>
+  :root{
+    --brand-blue:#2b3990; --brand-red:#ed1c24; --dark:#383535;
+    --panel:#ebebeb; --line:#d9d9d9; --muted:#6b6b6b;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;padding:0}
+  body{font-family:Arial,Helvetica,sans-serif;background:#f2f3f7;color:#1c1c1c}
+
+  /* ---------- App chrome ---------- */
+  .app-header{display:flex;align-items:center;gap:14px;padding:10px 18px;background:var(--dark);color:#fff}
+  .app-header img{width:44px;height:44px;border-radius:6px;background:#fff}
+  .app-header h1{font-size:18px;margin:0;font-weight:bold;letter-spacing:.3px}
+  .app-header h1 span{color:#ffd23f;font-weight:normal}
+  .app-header .sub{margin-left:auto;font-size:12px;color:#cfcfcf;text-align:right}
+
+  .toolbar{display:flex;flex-wrap:wrap;gap:8px;align-items:center;padding:12px 18px;background:#fff;border-bottom:1px solid var(--line);position:sticky;top:0;z-index:5}
+  .toolbar input[type=search]{flex:1 1 260px;min-width:200px;padding:8px 10px;border:1px solid #bbb;border-radius:6px;font-size:14px}
+  .toolbar select,.toolbar input[type=date]{padding:7px 8px;border:1px solid #bbb;border-radius:6px;font-size:13px;background:#fff}
+  .toolbar label{font-size:12px;color:var(--muted)}
+  .toolbar button{padding:7px 12px;border:1px solid #bbb;border-radius:6px;background:#fff;cursor:pointer;font-size:13px}
+  .toolbar button:hover{background:#f0f0f0}
+
+  .summary{padding:8px 18px;font-size:12.5px;color:var(--muted);display:flex;gap:18px;flex-wrap:wrap}
+  .summary b{color:#1c1c1c}
+
+  .list-wrap{padding:0 18px 18px;overflow-x:auto}
+  table.list{width:100%;border-collapse:collapse;background:#fff;font-size:13px;box-shadow:0 1px 3px rgba(0,0,0,.12)}
+  table.list th{background:var(--dark);color:#fff;text-align:left;padding:8px 8px;font-size:12px;white-space:nowrap;cursor:pointer;user-select:none;position:sticky;top:0}
+  table.list th .arr{opacity:.9;font-size:10px}
+  table.list td{padding:7px 8px;border-bottom:1px solid #eee;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:260px}
+  table.list tbody tr{cursor:pointer}
+  table.list tbody tr:hover{background:#eef2ff}
+  td.r,th.r{text-align:right}
+  .badge{display:inline-block;padding:1px 7px;border-radius:9px;font-size:11px;font-weight:bold}
+  .badge.I{background:#e3ecff;color:#1d3fa0}.badge.Q{background:#fff3d6;color:#8a6100}.badge.Cq{background:#ffe2e2;color:#a11}
+  .badge.sC{background:#e2f5e5;color:#1c7a2d}.badge.sO{background:#ffe9d6;color:#9a4d00}.badge.sP{background:#eee;color:#555}
+  .pos{color:#a11212;font-weight:bold}
+
+  .pager{display:flex;gap:6px;align-items:center;justify-content:center;padding:14px}
+  .pager button{padding:6px 12px;border:1px solid #bbb;background:#fff;border-radius:6px;cursor:pointer}
+  .pager button:disabled{opacity:.4;cursor:default}
+  .pager .pg{font-size:13px;color:var(--muted);margin:0 8px}
+  .empty{padding:40px;text-align:center;color:var(--muted);font-size:15px}
+
+  /* ---------- Invoice view chrome ---------- */
+  .inv-toolbar{display:flex;gap:8px;align-items:center;padding:10px 18px;background:#fff;border-bottom:1px solid var(--line);position:sticky;top:0;z-index:5}
+  .inv-toolbar button{padding:8px 14px;border:1px solid #bbb;border-radius:6px;background:#fff;cursor:pointer;font-size:13px}
+  .inv-toolbar button:hover{background:#f0f0f0}
+  .inv-toolbar .print{background:var(--brand-blue);border-color:var(--brand-blue);color:#fff;font-weight:bold}
+  .inv-toolbar .print:hover{background:#1f2c73}
+  .inv-toolbar .nav-pos{margin-left:auto;font-size:12px;color:var(--muted)}
+
+  /* ---------- Invoice sheet (mirrors the sample PDF, A4 = 595pt wide) ---------- */
+  .sheet-holder{padding:20px 0 40px}
+  .sheet{width:595pt;min-height:842pt;margin:0 auto;background:#fff;color:#000;
+         padding:16pt 10pt 34pt;box-shadow:0 2px 14px rgba(0,0,0,.25);
+         font-family:Arial,Helvetica,sans-serif;position:relative}
+  .sheet .top{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:8pt}
+  .sheet .top img.logo{width:74pt;height:74pt}
+  .sheet .top .doc-meta{text-align:right;padding-top:2pt}
+  .sheet .top .doc-title{font-size:16pt;font-weight:bold;margin-bottom:8pt}
+  .sheet .top .doc-meta .row{font-size:8pt;margin-top:4pt}
+  .sheet .top .doc-meta .row b{font-weight:bold}
+
+  .company-band{background:var(--panel);display:flex;justify-content:space-between;padding:8pt 11pt;margin-bottom:10pt}
+  .company-band .co{font-size:8pt;line-height:12pt}
+  .company-band .co .nm{font-weight:bold;margin-bottom:12pt}
+  .company-band table.contact{font-size:8pt;border-collapse:collapse}
+  .company-band table.contact td{padding:1.6pt 0}
+  .company-band table.contact td.l{font-weight:bold;text-align:right;padding-right:3pt}
+
+  .panels{display:flex;gap:4pt;margin-bottom:8pt}
+  .panel{background:var(--panel);width:50%;min-height:140pt;padding:10pt 6pt;font-size:8pt}
+  .panel table{border-collapse:collapse;width:100%}
+  .panel td{padding:2.4pt 2pt;vertical-align:top}
+  .panel td.l{font-weight:bold;text-align:right;width:42%;padding-right:4pt}
+  .panel.customer td.l{width:24%}
+  .panel .cust-name{font-weight:bold}
+
+  table.items{width:100%;border-collapse:collapse;font-size:10pt;margin-top:6pt}
+  table.items col.c-item{width:120pt} table.items col.c-desc{width:172pt}
+  table.items col.c-qty{width:70pt}  table.items col.c-up{width:82pt}
+  table.items col.c-tax{width:55pt}  table.items col.c-tot{width:76pt}
+  table.items thead th{background:var(--dark);color:#fff;font-size:9pt;font-weight:bold;
+    text-align:center;vertical-align:middle;height:30pt;padding:2pt 3pt;line-height:10.5pt}
+  table.items td{padding:3.6pt 6pt 3.6pt 5pt;vertical-align:top}
+  table.items td.r{text-align:right}
+  table.items tr.sec td{font-weight:bold;padding-top:9pt;padding-bottom:2pt;text-transform:uppercase}
+  table.items tr.sectotal td{font-weight:bold;padding-top:4.5pt;padding-bottom:4.5pt}
+  table.items tr.line td{page-break-inside:avoid}
+
+  .totals{display:flex;justify-content:flex-end;margin-top:14pt}
+  .totals table{border-collapse:collapse;font-size:8pt}
+  .totals td{padding:3.6pt 0}
+  .totals td.l{text-align:right;padding-right:14pt}
+  .totals td.v{text-align:right;min-width:60pt}
+  .totals tr.strong td{font-weight:bold}
+
+  .foot-notes{margin-top:22pt;font-size:10pt;line-height:11.5pt;padding:0 10pt}
+  .foot-notes p{margin:0 0 11.5pt}
+  .sheet .pageno{position:absolute;bottom:9pt;right:18pt;font-size:8pt}
+
+  /* ---------- Print ---------- */
+  @page{size:A4;margin:0}
+  @media print{
+    body{background:#fff}
+    .no-print{display:none !important}
+    #listView{display:none !important}
+    .sheet-holder{padding:0}
+    .sheet{box-shadow:none;margin:0;width:auto;min-height:auto;padding-bottom:10pt}
+    .sheet .pageno{position:static;text-align:right;padding-right:8pt;margin-top:14pt}
+    .company-band,.panel,table.items thead th{-webkit-print-color-adjust:exact;print-color-adjust:exact}
+    table.items thead{display:table-header-group}
+    table.items tr.sectotal,table.items tr.sec{page-break-inside:avoid}
+    .totals{page-break-inside:avoid}
+  }
+  @media (max-width:840px){ .sheet{transform-origin:top left;} }
+</style>
+</head>
+<body>
+
+<header class="app-header no-print">
+  <img src="assets/logo.png" alt="TIREPlus logo">
+  <h1>TIRE<span>Plus</span> Orleans — Invoice History</h1>
+  <div class="sub" id="headerStats"></div>
+</header>
+
+<!-- ============ LIST VIEW ============ -->
+<section id="listView">
+  <div class="toolbar no-print">
+    <input type="search" id="q" placeholder="Search customer, plate, job #, invoice #, vehicle, description…">
+    <label>Type
+      <select id="fType">
+        <option value="">All</option>
+        <option value="I">Invoice</option>
+        <option value="Q">Quote</option>
+        <option value="C">Credit</option>
+      </select>
+    </label>
+    <label>Status
+      <select id="fStatus">
+        <option value="">All</option>
+        <option value="C">Closed</option>
+        <option value="O">Open</option>
+        <option value="P">Parked</option>
+      </select>
+    </label>
+    <label>From <input type="date" id="fFrom"></label>
+    <label>To <input type="date" id="fTo"></label>
+    <button id="btnClear" title="Reset filters">Clear</button>
+  </div>
+  <div class="summary no-print" id="summary"></div>
+  <div class="list-wrap">
+    <table class="list">
+      <thead id="listHead"></thead>
+      <tbody id="listBody"></tbody>
+    </table>
+    <div class="empty" id="emptyMsg" hidden>No invoices match the current filters.</div>
+  </div>
+  <div class="pager no-print" id="pager"></div>
+</section>
+
+<!-- ============ INVOICE VIEW ============ -->
+<section id="invView" hidden>
+  <div class="inv-toolbar no-print">
+    <button id="btnBack">&#8592; Back to list</button>
+    <button id="btnPrev" title="Previous invoice in list">&#8592; Prev</button>
+    <button id="btnNext" title="Next invoice in list">Next &#8594;</button>
+    <button class="print" id="btnPrint">&#128424; Print / Save as PDF</button>
+    <span class="nav-pos" id="navPos"></span>
+  </div>
+  <div class="sheet-holder">
+    <div class="sheet" id="sheet"></div>
+  </div>
+</section>
+
+<script src="data/invoices.js"></script>
+<script src="data/items.js"></script>
+<script>
+'use strict';
+
+/* ================= Company constants (edit as needed) ================= */
+const COMPANY = {
+  name: 'TIREPlus Orleans',
+  address1: '2006 St. Joseph Blvd',
+  address2: 'Orleans, ON K1C 1E6',
+  phone: '1-613-834-7325',
+  email: 'info@tireplus.ca',
+  web: 'https://www.tireplus.ca',
+  hst: '869023234'
+};
+const FOOT_NOTES = [
+  "Your wheel nuts have been torqued to manufacturer's specifications. Wheel nuts should be rechecked after 100 kilometres (~60 miles).",
+  'Recommended Tire Rotation: every 10,000 km or 6 months',
+  'There will be a 25% re-stocking fee for cancelled orders.',
+  'Thank you for your business.  Customer Portal https://my.workshopsoftware.com/customer.html#/',
+  'Reply STOP to OPT Out.'
+];
+const SECTIONS = [   // product_type -> invoice section, in print order
+  {pt:'J', en:'LABOR',       fr:"MAIN D'OEUVRE",  totalLbl:'Labor Total'},
+  {pt:'S', en:'PARTS',       fr:'PIÈCES',     totalLbl:'Parts Total'},
+  {pt:'T', en:'TIRES',       fr:'PNEUS',           totalLbl:'Tires Total'},
+  {pt:'W', en:'CONSUMABLES', fr:'CONSOMMABLES',    totalLbl:'Consumables Total'},
+  {pt:'A', en:'SUBLET',      fr:'SOUS-TRAITANCE',  totalLbl:'Sublet Total'}
+];
+const TYPE_LBL   = {I:'Invoice', Q:'Quote', C:'Credit'};
+const STATUS_LBL = {C:'Closed', O:'Open', P:'Parked'};
+
+/* ================= Load data ================= */
+function materialize(pack){
+  const cols = pack.cols;
+  return pack.rows.map(r => { const o={}; for(let i=0;i<cols.length;i++) o[cols[i]]=r[i]; return o; });
+}
+const INVOICES = materialize(window.TP_INVOICES);
+const ITEMS    = materialize(window.TP_ITEMS);
+const itemsByJob = new Map();
+for (const it of ITEMS){
+  let a = itemsByJob.get(it.job);
+  if (!a) itemsByJob.set(it.job, a=[]);
+  a.push(it);
+}
+INVOICES.forEach((v,i)=>{
+  v._idx = i;
+  v._hay = [v.name, v.plate, v.job, v.inv, v.desc, v.make, v.model, v.date,
+            v.suburb, v.state, v.postcode].join(' ').toLowerCase();
+});
+
+/* ================= Helpers ================= */
+const $ = s => document.querySelector(s);
+const esc = s => String(s==null?'':s).replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const r2  = x => Math.round((x + Number.EPSILON) * 100) / 100;
+function money(x, blankIfNull){
+  if (x==null || isNaN(x)) return blankIfNull ? '' : '$0.00';
+  const n = r2(x), a = Math.abs(n);
+  return (n<0?'-':'') + '$' + a.toLocaleString('en-CA',{minimumFractionDigits:2, maximumFractionDigits:2});
+}
+function fmtDate(iso){
+  if(!iso) return '';
+  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(iso);
+  return m ? `${m[2]}/${m[3]}/${m[1]}` : iso;
+}
+const fmtInt = x => x==null ? '' : Number(x).toLocaleString('en-CA');
+
+/* ================= List state ================= */
+const state = { q:'', type:'', status:'', from:'', to:'', sortKey:'date', sortDir:-1, page:1, perPage:50 };
+let filtered = INVOICES.slice();
+
+const COLS = [
+  {key:'date',   lbl:'Date',      cls:'',  val:v=>fmtDate(v.date)},
+  {key:'job',    lbl:'Job #',     cls:'',  val:v=>esc(v.job)},
+  {key:'inv',    lbl:'Invoice #', cls:'',  val:v=>esc(v.inv==null?'':v.inv)},
+  {key:'type',   lbl:'Type',      cls:'',  val:v=>`<span class="badge ${v.type==='C'?'Cq':esc(v.type)}">${esc(TYPE_LBL[v.type]||v.type)}</span>`},
+  {key:'status', lbl:'Status',    cls:'',  val:v=>`<span class="badge s${esc(v.status)}">${esc(STATUS_LBL[v.status]||v.status)}</span>`},
+  {key:'name',   lbl:'Customer',  cls:'',  val:v=>esc(v.name)},
+  {key:'vehicle',lbl:'Vehicle',   cls:'',  val:v=>esc([v.buildDate,v.make,v.model].filter(Boolean).join(' '))},
+  {key:'plate',  lbl:'Plate',     cls:'',  val:v=>esc(v.plate)},
+  {key:'desc',   lbl:'Description',cls:'', val:v=>esc(v.desc)},
+  {key:'total',  lbl:'Total',     cls:'r', val:v=>money(v.total,true)},
+  {key:'balance',lbl:'Balance',   cls:'r', val:v=>{const b=v.balance; return b?`<span class="pos">${money(b)}</span>`:(b===0?'$0.00':'');}}
+];
+function sortVal(v,key){
+  if (key==='vehicle') return (v.make||'')+' '+(v.model||'');
+  const x = v[key];
+  return x==null ? (typeof INVOICES[0][key]==='number' ? -Infinity : '') : x;
+}
+function applyFilters(){
+  const tokens = state.q.toLowerCase().split(/\s+/).filter(Boolean);
+  filtered = INVOICES.filter(v=>{
+    if (state.type   && v.type   !== state.type)   return false;
+    if (state.status && v.status !== state.status) return false;
+    if (state.from   && (!v.date || v.date < state.from)) return false;
+    if (state.to     && (!v.date || v.date > state.to))   return false;
+    for (const t of tokens) if (!v._hay.includes(t)) return false;
+    return true;
+  });
+  const k = state.sortKey, d = state.sortDir;
+  filtered.sort((a,b)=>{
+    const x = sortVal(a,k), y = sortVal(b,k);
+    if (x<y) return -d; if (x>y) return d;
+    return (a.job<b.job?-d:a.job>b.job?d:0);
+  });
+  state.page = 1;
+  renderList();
+}
+function renderHead(){
+  $('#listHead').innerHTML = '<tr>' + COLS.map(c=>{
+    const arr = state.sortKey===c.key ? `<span class="arr">${state.sortDir>0?'▲':'▼'}</span>` : '';
+    return `<th class="${c.cls}" data-key="${c.key}">${c.lbl} ${arr}</th>`;
+  }).join('') + '</tr>';
+}
+function renderList(){
+  renderHead();
+  const total = filtered.length;
+  const pages = Math.max(1, Math.ceil(total/state.perPage));
+  state.page = Math.min(state.page, pages);
+  const start = (state.page-1)*state.perPage;
+  const rows  = filtered.slice(start, start+state.perPage);
+
+  $('#listBody').innerHTML = rows.map(v =>
+    `<tr data-idx="${v._idx}">` + COLS.map(c=>`<td class="${c.cls}">${c.val(v)}</td>`).join('') + '</tr>'
+  ).join('');
+  $('#emptyMsg').hidden = total>0;
+
+  let sumT=0, sumB=0;
+  for (const v of filtered){ sumT += v.total||0; sumB += v.balance||0; }
+  $('#summary').innerHTML =
+    `<span><b>${total.toLocaleString()}</b> of ${INVOICES.length.toLocaleString()} records</span>`+
+    `<span>Total: <b>${money(sumT)}</b></span>`+
+    `<span>Balance due: <b>${money(sumB)}</b></span>`+
+    `<span>Click a row to view &amp; print the invoice.</span>`;
+
+  $('#pager').innerHTML =
+    `<button id="pgFirst" ${state.page<=1?'disabled':''}>&#171; First</button>`+
+    `<button id="pgPrev"  ${state.page<=1?'disabled':''}>&#8249; Prev</button>`+
+    `<span class="pg">Page ${state.page} of ${pages}</span>`+
+    `<button id="pgNext"  ${state.page>=pages?'disabled':''}>Next &#8250;</button>`+
+    `<button id="pgLast"  ${state.page>=pages?'disabled':''}>Last &#187;</button>`;
+  $('#pgFirst').onclick = ()=>{state.page=1; renderList();};
+  $('#pgPrev' ).onclick = ()=>{state.page--; renderList(); window.scrollTo(0,0);};
+  $('#pgNext' ).onclick = ()=>{state.page++; renderList(); window.scrollTo(0,0);};
+  $('#pgLast' ).onclick = ()=>{state.page=pages; renderList();};
+}
+
+/* ================= Invoice rendering ================= */
+function sectionsFor(job){
+  const items = (itemsByJob.get(job)||[]).slice()
+    .sort((a,b)=>(a.ordering??0)-(b.ordering??0));
+  const out = [];
+  for (const sec of SECTIONS){
+    const list = items.filter(it=>it.ptype===sec.pt);
+    if (list.length) out.push({sec, list, total: list.reduce((s,it)=>s+r2(it.amount||0),0)});
+  }
+  // any product types not covered above (defensive)
+  const known = new Set(SECTIONS.map(s=>s.pt));
+  const other = items.filter(it=>!known.has(it.ptype));
+  if (other.length) out.push({sec:{en:'OTHER', fr:'AUTRE', totalLbl:'Other Total'}, list:other,
+                              total: other.reduce((s,it)=>s+r2(it.amount||0),0)});
+  return out;
+}
+function renderInvoice(v){
+  const title = TYPE_LBL[v.type] || 'Invoice';
+  const addr  = [v.suburb, [v.state, v.postcode].filter(Boolean).join(' ')].filter(Boolean).join(', ');
+  const vehicle = [v.make, v.model].filter(Boolean).join(' ');
+  const secs = sectionsFor(v.job);
+
+  const head = `
+    <div class="top">
+      <img class="logo" src="assets/logo.png" alt="TIREPlus">
+      <div class="doc-meta">
+        <div class="doc-title">${esc(title)}</div>
+        <div class="row"><b>Date / Date:</b> ${fmtDate(v.date)}</div>
+        <div class="row"><b>Job # / # Travail:</b> ${esc(v.job)}</div>
+        ${v.inv!=null && v.inv!=='' ? `<div class="row"><b>Invoice # / # Facture:</b> ${esc(v.inv)}</div>` : ''}
+      </div>
+    </div>
+    <div class="company-band">
+      <div class="co">
+        <div class="nm">${esc(COMPANY.name)}</div>
+        <div>${esc(COMPANY.address1)}</div>
+        <div>${esc(COMPANY.address2)}</div>
+      </div>
+      <table class="contact">
+        <tr><td class="l">Phone / Téléphone</td><td>${esc(COMPANY.phone)}</td></tr>
+        <tr><td class="l">Email / Courriel</td><td>${esc(COMPANY.email)}</td></tr>
+        <tr><td class="l">Web / Web</td><td>${esc(COMPANY.web)}</td></tr>
+        <tr><td class="l">HST # / TVH #</td><td>${esc(COMPANY.hst)}</td></tr>
+      </table>
+    </div>
+    <div class="panels">
+      <div class="panel customer">
+        <table>
+          <tr><td class="l"></td><td class="cust-name">${esc(v.name)}</td></tr>
+          <tr><td class="l"></td><td>${esc(addr)}</td></tr>
+        </table>
+      </div>
+      <div class="panel vehicle">
+        <table>
+          <tr><td class="l">License Plate</td><td>${esc(v.plate)}</td></tr>
+          <tr><td class="l">Make/Marque / Model/Modèle</td><td>${esc(vehicle)}</td></tr>
+          <tr><td class="l">Body / Carrosserie</td><td>${esc(v.bodyType||'')}</td></tr>
+          <tr><td class="l">Odometer / Odomètre</td><td>${v.odometer ? fmtInt(v.odometer) : ''}</td></tr>
+          <tr><td class="l">Prod. Date / Date de Production</td><td>${esc(v.buildDate||'')}</td></tr>
+        </table>
+      </div>
+    </div>`;
+
+  let itemsHtml = `
+    <table class="items">
+      <colgroup><col class="c-item"><col class="c-desc"><col class="c-qty"><col class="c-up"><col class="c-tax"><col class="c-tot"></colgroup>
+      <thead><tr>
+        <th>Item / Item</th><th>Description / Description</th>
+        <th>Quantity /<br>Quantité</th><th>Unit Price / Prix<br>Unitaire</th>
+        <th>HST</th><th>Total / Total</th>
+      </tr></thead>`;
+  for (const {sec, list, total} of secs){
+    itemsHtml += `<tbody>
+      <tr class="sec"><td colspan="6">${esc(sec.en)} / ${esc(sec.fr)}</td></tr>`;
+    for (const it of list){
+      itemsHtml += `<tr class="line">
+        <td>${esc(it.code)}</td><td>${esc(it.desc)}</td>
+        <td class="r">${it.qty==null?'':Number(it.qty).toFixed(2)}</td>
+        <td class="r">${money(it.unitPrice)}</td>
+        <td class="r">${money(it.gst)}</td>
+        <td class="r">${money(it.amount)}</td>
+      </tr>`;
+    }
+    itemsHtml += `<tr class="sectotal"><td colspan="5" class="r">${esc(sec.totalLbl)}</td><td class="r">${money(total)}</td></tr>
+    </tbody>`;
+  }
+  itemsHtml += '</table>';
+  if (!secs.length) itemsHtml += '<div style="font-size:10pt;padding:14pt 6pt;color:#555">No line items on this record.</div>';
+
+  let totRows = `<tr><td class="l">Subtotal / Sous-Total</td><td class="v">${money(v.subtotal)}</td></tr>`;
+  if (v.discount) totRows += `<tr><td class="l">Discount / Remise</td><td class="v">-${money(v.discount).replace('-','')}</td></tr>`;
+  totRows += `<tr><td class="l">HST</td><td class="v">${money(v.gst)}</td></tr>`;
+  totRows += `<tr class="strong"><td class="l">Total / Total</td><td class="v">${money(v.total)}</td></tr>`;
+  if (v.deposits) totRows += `<tr><td class="l">Deposits / Dépôts</td><td class="v">${money(v.deposits)}</td></tr>`;
+  totRows += `<tr class="strong"><td class="l">Balance Due / Solde Dû</td><td class="v">${money(v.balance==null?0:v.balance)}</td></tr>`;
+
+  const notes = FOOT_NOTES.map(n=>`<p>${esc(n)}</p>`).join('');
+
+  $('#sheet').innerHTML = head + itemsHtml +
+    `<div class="totals"><table>${totRows}</table></div>` +
+    `<div class="foot-notes">${notes}</div>` +
+    `<div class="pageno"></div>`;
+
+  // "Page 1 of 1" like the sample — but only when the invoice really fits on
+  // one A4 page; longer invoices paginate naturally (the item-table header
+  // repeats on every page) and the browser can add page numbers if wanted.
+  requestAnimationFrame(()=>{
+    const sheet = $('#sheet');
+    const onePageCSSpx = 842 * 96 / 72 - 4;           // A4 height in CSS px
+    const notesEl = sheet.querySelector('.foot-notes');
+    const padBottom = parseFloat(getComputedStyle(sheet).paddingBottom) || 0;
+    const contentH = notesEl.getBoundingClientRect().bottom - sheet.getBoundingClientRect().top + padBottom;
+    sheet.querySelector('.pageno').textContent = contentH <= onePageCSSpx ? 'Page 1 of 1' : '';
+  });
+
+  document.title = `${title} — Job ${v.job} — ${v.name||''}`;
+}
+
+/* ================= Routing / view switching ================= */
+let currentIdx = null;
+function showList(){
+  $('#invView').hidden = true;
+  $('#listView').hidden = false;
+  document.title = 'TIREPlus Orleans — Invoice History';
+}
+function showInvoice(idx){
+  const v = INVOICES[idx];
+  if (!v) { location.hash=''; return; }
+  currentIdx = idx;
+  renderInvoice(v);
+  const pos = filtered.findIndex(x=>x._idx===idx);
+  $('#btnPrev').disabled = pos<=0;
+  $('#btnNext').disabled = pos<0 || pos>=filtered.length-1;
+  $('#navPos').textContent = pos>=0 ? `${pos+1} of ${filtered.length.toLocaleString()} in current list` : '';
+  $('#listView').hidden = true;
+  $('#invView').hidden = false;
+  window.scrollTo(0,0);
+}
+function route(){
+  const m = /^#\/i\/(\d+)$/.exec(location.hash);
+  if (m) showInvoice(+m[1]); else showList();
+}
+window.addEventListener('hashchange', route);
+
+/* ================= Wire up ================= */
+let qTimer;
+$('#q').addEventListener('input', e=>{ clearTimeout(qTimer); qTimer=setTimeout(()=>{state.q=e.target.value; applyFilters();},150); });
+$('#fType').addEventListener('change', e=>{state.type=e.target.value; applyFilters();});
+$('#fStatus').addEventListener('change', e=>{state.status=e.target.value; applyFilters();});
+$('#fFrom').addEventListener('change', e=>{state.from=e.target.value; applyFilters();});
+$('#fTo').addEventListener('change', e=>{state.to=e.target.value; applyFilters();});
+$('#btnClear').addEventListener('click', ()=>{
+  state.q=state.type=state.status=state.from=state.to='';
+  $('#q').value=''; $('#fType').value=''; $('#fStatus').value=''; $('#fFrom').value=''; $('#fTo').value='';
+  applyFilters();
+});
+$('#listHead').addEventListener('click', e=>{
+  const th = e.target.closest('th'); if(!th) return;
+  const key = th.dataset.key;
+  if (state.sortKey===key) state.sortDir*=-1; else {state.sortKey=key; state.sortDir = (key==='date'||key==='total'||key==='balance'||key==='job'||key==='inv') ? -1 : 1;}
+  applyFilters();
+});
+$('#listBody').addEventListener('click', e=>{
+  const tr = e.target.closest('tr[data-idx]'); if(!tr) return;
+  location.hash = '#/i/'+tr.dataset.idx;
+});
+$('#btnBack').addEventListener('click', ()=>{ location.hash=''; });
+$('#btnPrint').addEventListener('click', ()=>window.print());
+$('#btnPrev').addEventListener('click', ()=>{
+  const pos = filtered.findIndex(x=>x._idx===currentIdx);
+  if (pos>0) location.hash = '#/i/'+filtered[pos-1]._idx;
+});
+$('#btnNext').addEventListener('click', ()=>{
+  const pos = filtered.findIndex(x=>x._idx===currentIdx);
+  if (pos>=0 && pos<filtered.length-1) location.hash = '#/i/'+filtered[pos+1]._idx;
+});
+
+/* header stats */
+(function(){
+  const dates = INVOICES.map(v=>v.date).filter(Boolean).sort();
+  $('#headerStats').innerHTML =
+    `${INVOICES.length.toLocaleString()} records &middot; ${ITEMS.length.toLocaleString()} line items<br>`+
+    `${fmtDate(dates[0])} &ndash; ${fmtDate(dates[dates.length-1])}`;
+})();
+
+/* PWA: register service worker only when served over http(s) — file:// runs fine without it */
+if ('serviceWorker' in navigator && /^https?:$/.test(location.protocol)){
+  navigator.serviceWorker.register('sw.js').catch(()=>{});
+}
+
+applyFilters();
+route();
+</script>
+</body>
+</html>
