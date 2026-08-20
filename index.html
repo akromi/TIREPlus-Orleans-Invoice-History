@@ -107,14 +107,15 @@
   table.items tr.sectotal td{font-weight:bold;padding-top:4.5pt;padding-bottom:4.5pt}
   table.items tr.line td{page-break-inside:avoid}
 
-  .totals{display:flex;justify-content:flex-end;margin-top:14pt}
+  .sheet .hr{border-top:0.8pt solid #000;margin-top:8pt}
+  .totals{display:flex;justify-content:flex-end;margin-top:6pt}
   .totals table{border-collapse:collapse;font-size:8pt}
   .totals td{padding:3.6pt 0}
   .totals td.l{text-align:right;padding-right:14pt}
   .totals td.v{text-align:right;min-width:60pt}
   .totals tr.strong td{font-weight:bold}
 
-  .foot-notes{margin-top:22pt;font-size:10pt;line-height:11.5pt;padding:0 10pt}
+  .foot-notes{margin-top:14pt;font-size:10pt;line-height:11.5pt;padding:0 10pt}
   .foot-notes p{margin:0 0 11.5pt}
   .sheet .pageno{position:absolute;bottom:9pt;right:18pt;font-size:8pt}
 
@@ -525,7 +526,9 @@ function renderInvoice(v){
   const notes = FOOT_NOTES.map(n=>`<p>${esc(n)}</p>`).join('');
 
   $('#sheet').innerHTML = head + itemsHtml +
+    `<div class="hr"></div>` +
     `<div class="totals"><table>${totRows}</table></div>` +
+    `<div class="hr"></div>` +
     `<div class="foot-notes">${notes}</div>` +
     `<div class="pageno"></div>`;
 
