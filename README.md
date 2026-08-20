@@ -19,9 +19,9 @@ over `file://` — nothing is uploaded anywhere.
 
 ## Using the app
 
-- **Search** by customer, plate, job #, invoice #, vehicle, description — or a
-  supplier (purchase) invoice reference from the job-card notes, e.g.
-  `wp#8332813` or `ps#669192`.
+- **Search** by customer, plate, job #, invoice #, vehicle, description,
+  phone number, email, VIN — or a supplier (purchase) invoice reference from
+  the job-card notes, e.g. `wp#8332813` or `ps#669192`.
 - **Filter** by type (Invoice / Quote / Credit), status (Closed / Open / Parked),
   purchase refs (with / without) and posting-date range; **sort** by clicking
   any column header. The **Purchase Refs** column lists every supplier invoice
@@ -43,11 +43,17 @@ over `file://` — nothing is uploaded anywhere.
 |---|---|
 | `data/invoices.js` | 12,229 invoices / quotes / credits (Mar 2023 – Aug 2026) |
 | `data/items.js` | 70,981 invoice line items |
+| `data/customers.js` | 4,688 customers (phone, email, address) |
+| `data/vehicles.js` | 5,255 vehicles (VIN, next service date) |
 
-To refresh with a newer Workshop Software export, run:
+Customers are joined to invoices by display name and vehicles by plate, which
+fills in the phone, address, VIN and next-service fields on the printed
+invoice, and makes phone numbers, emails and VINs searchable.
+
+To refresh with newer Workshop Software exports, run:
 
 ```bash
-python3 tools/convert_csv.py <invoice_export.csv> <invoice_item_export.csv> data
+python3 tools/convert_csv.py <invoices.csv> <invoice_items.csv> [customers.csv] [vehicles.csv] data
 ```
 
 Line items are laid out exactly like the Workshop Software invoice:

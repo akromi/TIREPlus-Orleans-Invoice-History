@@ -2,10 +2,12 @@
 """Convert Workshop Software CSV exports into the JS data files used by the app.
 
 Usage:
-    python3 tools/convert_csv.py <invoices.csv> <invoice_items.csv> [output_dir]
+    python3 tools/convert_csv.py <invoices.csv> <invoice_items.csv> \
+            [customers.csv] [vehicles.csv] [output_dir]
 
-Writes data/invoices.js and data/items.js (JS files that assign to a global
-variable so the app can load them over file:// without fetch/CORS issues).
+Writes data/invoices.js, data/items.js and (when the extra exports are given)
+data/customers.js and data/vehicles.js — JS files that assign to a global
+variable so the app can load them over file:// without fetch/CORS issues.
 """
 import csv, html, json, re, sys, os
 
@@ -16,6 +18,8 @@ INV_COLS = ["job","inv","type","status","date","name","plate","desc","total",
             "suburb","postcode","make","model","buildDate","bodyType","odometer",
             "note","jobNote"]
 ITEM_COLS = ["job","code","desc","qty","unitPrice","gst","amount","sub","ptype","ordering","bom","note"]
+CUST_COLS = ["name","phone","email","addr1","addr2","suburb","state","postcode"]
+VEH_COLS  = ["plate","name","vin","next"]
 
 
 def num(v):
@@ -43,7 +47,7 @@ def plain(v):
     return t.strip()
 
 
-def convert(inv_csv, item_csv, out_dir):
+def convert(inv_csv, item_csv, out_dir, cust_csv=None, veh_csv=None):
     inv_rows = []
     with open(inv_csv, encoding="utf-8-sig", newline="") as f:
         for r in csv.DictReader(f):
@@ -71,6 +75,29 @@ def convert(inv_csv, item_csv, out_dir):
                 s(r["note"]),
             ])
 
+    cust_rows = []
+    if cust_csv:
+        best = {}
+        for r in csv.DictReader(open(cust_csv, encoding="utf-8-sig", newline="")):
+            name = s(r["display_name"])
+            if not name:
+                continue
+            row = [name, s(r["mobile"]) or s(r["phone"]), s(r["email"]),
+                   s(r["address1"]), s(r["address2"]), s(r["suburb"]),
+                   s(r["state"]), s(r["postcode"])]
+            score = sum(1 for x in row[1:] if x)
+            if name not in best or score > best[name][0]:
+                best[name] = (score, row)
+        cust_rows = [row for _, row in best.values()]
+
+    veh_rows = []
+    if veh_csv:
+        for r in csv.DictReader(open(veh_csv, encoding="utf-8-sig", newline="")):
+            plate = s(r["plate_number"]).upper()
+            if not plate:
+                continue
+            veh_rows.append([plate, s(r["display_name"]), s(r["vin"]), s(r["next_service"])])
+
     os.makedirs(out_dir, exist_ok=True)
 
     def write(name, var, cols, rows):
@@ -84,9 +111,19 @@ def convert(inv_csv, item_csv, out_dir):
 
     write("invoices.js", "TP_INVOICES", INV_COLS, inv_rows)
     write("items.js", "TP_ITEMS", ITEM_COLS, item_rows)
+    if cust_csv:
+        write("customers.js", "TP_CUSTOMERS", CUST_COLS, cust_rows)
+    if veh_csv:
+        write("vehicles.js", "TP_VEHICLES", VEH_COLS, veh_rows)
 
 
 if __name__ == "__main__":
     if len(sys.argv) < 3:
         sys.exit(__doc__)
-    convert(sys.argv[1], sys.argv[2], sys.argv[3] if len(sys.argv) > 3 else "data")
+    rest = sys.argv[3:]
+    out = "data"
+    if rest and not rest[-1].lower().endswith(".csv"):
+        out = rest.pop()
+    cust = rest[0] if len(rest) > 0 else None
+    veh = rest[1] if len(rest) > 1 else None
+    convert(sys.argv[1], sys.argv[2], out, cust, veh)
