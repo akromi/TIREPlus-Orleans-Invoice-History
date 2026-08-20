@@ -22,8 +22,12 @@ over `file://` — nothing is uploaded anywhere.
 - **Search** by customer, plate, job #, invoice #, vehicle, description — or a
   supplier (purchase) invoice reference from the job-card notes, e.g.
   `wp#8332813` or `ps#669192`.
-- **Filter** by type (Invoice / Quote / Credit), status (Closed / Open / Parked)
-  and posting-date range; **sort** by clicking any column header.
+- **Filter** by type (Invoice / Quote / Credit), status (Closed / Open / Parked),
+  purchase refs (with / without) and posting-date range; **sort** by clicking
+  any column header. The **Purchase Refs** column lists every supplier invoice
+  reference found in the job's notes.
+- **Export CSV** downloads the currently filtered list (with the purchase
+  refs) for reconciling supplier invoices in a spreadsheet.
 - **Click a row** to open the invoice, rendered like the sample PDF.
 - Click **Print / Save as PDF** and pick *Save as PDF* as the destination
   (paper size A4, margins *None* / *Default*, "Background graphics" ON if the

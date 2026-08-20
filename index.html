@@ -44,6 +44,7 @@
   .badge.I{background:#e3ecff;color:#1d3fa0}.badge.Q{background:#fff3d6;color:#8a6100}.badge.Cq{background:#ffe2e2;color:#a11}
   .badge.sC{background:#e2f5e5;color:#1c7a2d}.badge.sO{background:#ffe9d6;color:#9a4d00}.badge.sP{background:#eee;color:#555}
   .pos{color:#a11212;font-weight:bold}
+  table.list td .refchip{display:inline-block;background:#ffe9a8;border-radius:4px;padding:0 5px;margin-right:4px;font-size:13px;font-weight:bold}
 
   .pager{display:flex;gap:6px;align-items:center;justify-content:center;padding:14px}
   .pager button{padding:6px 12px;border:1px solid #bbb;background:#fff;border-radius:6px;cursor:pointer}
@@ -161,9 +162,17 @@
         <option value="P">Parked</option>
       </select>
     </label>
+    <label>Purchase ref
+      <select id="fRefs">
+        <option value="">All</option>
+        <option value="y">With refs</option>
+        <option value="n">Without refs</option>
+      </select>
+    </label>
     <label>From <input type="date" id="fFrom"></label>
     <label>To <input type="date" id="fTo"></label>
     <button id="btnClear" title="Reset filters">Clear</button>
+    <button id="btnExport" title="Download the current filtered list as a CSV file">Export CSV</button>
   </div>
   <div class="summary no-print" id="summary"></div>
   <div class="list-wrap">
@@ -236,10 +245,13 @@ for (const it of ITEMS){
   if (!a) itemsByJob.set(it.job, a=[]);
   a.push(it);
 }
+const REF_RX = /\b[A-Za-z]{1,12}\s?#\s?[A-Za-z0-9][A-Za-z0-9\-]{2,}/g;
 INVOICES.forEach((v,i)=>{
   v._idx = i;
+  const noteTxt = [v.jobNote, v.note].filter(Boolean).join('\n');
+  v._refs = noteTxt ? [...new Set((noteTxt.match(REF_RX)||[]).map(r=>r.replace(/\s?#\s?/,'#')))] : [];
   v._hay = [v.name, v.plate, v.job, v.inv, v.desc, v.make, v.model, v.date,
-            v.suburb, v.state, v.postcode, v.note, v.jobNote].join(' ').toLowerCase();
+            v.suburb, v.state, v.postcode, v.note, v.jobNote, v._refs.join(' ')].join(' ').toLowerCase();
 });
 
 /* ================= Helpers ================= */
@@ -259,7 +271,7 @@ function fmtDate(iso){
 const fmtInt = x => x==null ? '' : Number(x).toLocaleString('en-CA');
 
 /* ================= List state ================= */
-const state = { q:'', type:'', status:'', from:'', to:'', sortKey:'date', sortDir:-1, page:1, perPage:50 };
+const state = { q:'', type:'', status:'', refs:'', from:'', to:'', sortKey:'date', sortDir:-1, page:1, perPage:50 };
 let filtered = INVOICES.slice();
 
 const COLS = [
@@ -272,11 +284,13 @@ const COLS = [
   {key:'vehicle',lbl:'Vehicle',   cls:'',  val:v=>esc([v.buildDate,v.make,v.model].filter(Boolean).join(' '))},
   {key:'plate',  lbl:'Plate',     cls:'',  val:v=>esc(v.plate)},
   {key:'desc',   lbl:'Description',cls:'', val:v=>esc(v.desc)},
+  {key:'refs',   lbl:'Purchase Refs',cls:'', val:v=>v._refs.map(r=>`<span class="refchip">${esc(r)}</span>`).join('')},
   {key:'total',  lbl:'Total',     cls:'r', val:v=>money(v.total,true)},
   {key:'balance',lbl:'Balance',   cls:'r', val:v=>{const b=v.balance; return b?`<span class="pos">${money(b)}</span>`:(b===0?'$0.00':'');}}
 ];
 function sortVal(v,key){
   if (key==='vehicle') return (v.make||'')+' '+(v.model||'');
+  if (key==='refs') return v._refs.join(' ').toLowerCase();
   const x = v[key];
   return x==null ? (typeof INVOICES[0][key]==='number' ? -Infinity : '') : x;
 }
@@ -285,6 +299,8 @@ function applyFilters(){
   filtered = INVOICES.filter(v=>{
     if (state.type   && v.type   !== state.type)   return false;
     if (state.status && v.status !== state.status) return false;
+    if (state.refs === 'y' && !v._refs.length) return false;
+    if (state.refs === 'n' &&  v._refs.length) return false;
     if (state.from   && (!v.date || v.date < state.from)) return false;
     if (state.to     && (!v.date || v.date > state.to))   return false;
     for (const t of tokens) if (!v._hay.includes(t)) return false;
@@ -535,12 +551,31 @@ let qTimer;
 $('#q').addEventListener('input', e=>{ clearTimeout(qTimer); qTimer=setTimeout(()=>{state.q=e.target.value; applyFilters();},150); });
 $('#fType').addEventListener('change', e=>{state.type=e.target.value; applyFilters();});
 $('#fStatus').addEventListener('change', e=>{state.status=e.target.value; applyFilters();});
+$('#fRefs').addEventListener('change', e=>{state.refs=e.target.value; applyFilters();});
 $('#fFrom').addEventListener('change', e=>{state.from=e.target.value; applyFilters();});
 $('#fTo').addEventListener('change', e=>{state.to=e.target.value; applyFilters();});
 $('#btnClear').addEventListener('click', ()=>{
-  state.q=state.type=state.status=state.from=state.to='';
-  $('#q').value=''; $('#fType').value=''; $('#fStatus').value=''; $('#fFrom').value=''; $('#fTo').value='';
+  state.q=state.type=state.status=state.refs=state.from=state.to='';
+  $('#q').value=''; $('#fType').value=''; $('#fStatus').value=''; $('#fRefs').value=''; $('#fFrom').value=''; $('#fTo').value='';
   applyFilters();
+});
+$('#btnExport').addEventListener('click', ()=>{
+  const csvCell = x => '"' + String(x==null?'':x).replace(/"/g,'""') + '"';
+  const head = ['Date','Job #','Invoice #','Type','Status','Customer','Vehicle','Plate',
+                'Description','Total','Balance','Purchase Refs'];
+  const lines = [head.map(csvCell).join(',')];
+  for (const v of filtered){
+    lines.push([fmtDate(v.date), v.job, v.inv==null?'':v.inv, TYPE_LBL[v.type]||v.type,
+      STATUS_LBL[v.status]||v.status, v.name, [v.buildDate,v.make,v.model].filter(Boolean).join(' '),
+      v.plate, v.desc, v.total==null?'':r2(v.total).toFixed(2), v.balance==null?'':r2(v.balance).toFixed(2),
+      v._refs.join('; ')].map(csvCell).join(','));
+  }
+  const blob = new Blob(['\ufeff' + lines.join('\r\n')], {type:'text/csv;charset=utf-8'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'TIREPlus_invoices_' + new Date().toISOString().slice(0,10).replace(/-/g,'') + '.csv';
+  a.click();
+  setTimeout(()=>URL.revokeObjectURL(a.href), 5000);
 });
 $('#listHead').addEventListener('click', e=>{
   const th = e.target.closest('th'); if(!th) return;
