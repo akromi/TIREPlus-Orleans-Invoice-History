@@ -114,6 +114,7 @@
   .totals td.l{text-align:right;padding-right:14pt}
   .totals td.v{text-align:right;min-width:60pt}
   .totals tr.strong td{font-weight:bold}
+  .totals tr.paid td{font-weight:bold;font-size:10pt;padding-top:6pt}
 
   .foot-notes{margin-top:14pt;font-size:10pt;line-height:11.5pt;padding:0 10pt}
   .foot-notes p{margin:0 0 11.5pt}
@@ -522,6 +523,10 @@ function renderInvoice(v){
   totRows += `<tr class="strong"><td class="l">Total / Total</td><td class="v">${money(v.total)}</td></tr>`;
   if (v.deposits) totRows += `<tr><td class="l">Deposits / Dépôts</td><td class="v">${money(v.deposits)}</td></tr>`;
   totRows += `<tr class="strong"><td class="l">Balance Due / Solde Dû</td><td class="v">${money(v.balance==null?0:v.balance)}</td></tr>`;
+  // amount received = total - balance due (the export has no payment method,
+  // so unlike WSS's "Paid VISA" the method cannot be shown)
+  const paid = v.type === 'I' ? r2((v.total||0) - (v.balance||0)) : 0;
+  if (paid > 0.004) totRows += `<tr class="paid"><td class="l">Paid</td><td class="v">${money(paid)}</td></tr>`;
 
   const notes = FOOT_NOTES.map(n=>`<p>${esc(n)}</p>`).join('');
 
