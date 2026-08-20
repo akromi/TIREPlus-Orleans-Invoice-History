@@ -41,9 +41,13 @@ To refresh with a newer Workshop Software export, run:
 python3 tools/convert_csv.py <invoice_export.csv> <invoice_item_export.csv> data
 ```
 
-Line items are grouped into sections by `product_type`:
-`J` → Labor, `S` → Parts, `T` → Tires, `W` → Consumables, `A` → Sublet,
-sorted by their `ordering` field — matching the original invoice layout.
+Line items are laid out exactly like the Workshop Software invoice:
+items are walked in `ordering` order and every `is_bom_parent` row starts a
+service-bundle group (`CODE - Description`) whose lines follow it, closed by a
+`CODE Total` row showing Subtotal / HST / Total. Items before the first bundle
+(or all items when an invoice has no bundles) fall into the classic
+product-type sections (`J` → Labor, `S` → Parts, `T` → Tires,
+`W` → Consumables, `A` → Sublet) with a single section total.
 
 Company details printed in the header (address, phone, HST #) are constants at
 the top of the `<script>` block in `index.html` — edit them there if they change.

@@ -14,7 +14,7 @@ csv.field_size_limit(10**9)
 INV_COLS = ["job","inv","type","status","date","name","plate","desc","total",
             "balance","gst","subtotal","discount","deposits","taxRate","state",
             "suburb","postcode","make","model","buildDate","bodyType","odometer"]
-ITEM_COLS = ["job","code","desc","qty","unitPrice","gst","amount","ptype","ordering"]
+ITEM_COLS = ["job","code","desc","qty","unitPrice","gst","amount","sub","ptype","ordering","bom","note"]
 
 
 def num(v):
@@ -55,7 +55,9 @@ def convert(inv_csv, item_csv, out_dir):
                 num(r["job_card_number"]) or s(r["job_card_number"]),
                 s(r["item_code"]), s(r["description"]) or s(r["product_description"]),
                 num(r["quantity"]), num(r["unit_price"]), num(r["gst"]),
-                num(r["amount"]), s(r["product_type"]), num(r["ordering"]),
+                num(r["amount"]), num(r["subtotal"]), s(r["product_type"]),
+                num(r["ordering"]), 1 if s(r["is_bom_parent"]) == "true" else 0,
+                s(r["note"]),
             ])
 
     os.makedirs(out_dir, exist_ok=True)

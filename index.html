@@ -86,15 +86,16 @@
   .panel.customer td.l{width:24%}
   .panel .cust-name{font-weight:bold}
 
-  table.items{width:100%;border-collapse:collapse;font-size:10pt;margin-top:6pt}
-  table.items col.c-item{width:120pt} table.items col.c-desc{width:172pt}
-  table.items col.c-qty{width:70pt}  table.items col.c-up{width:82pt}
+  table.items{width:100%;table-layout:fixed;border-collapse:collapse;font-size:10pt;margin-top:6pt}
+  table.items col.c-item{width:100pt} table.items col.c-desc{width:217pt}
+  table.items col.c-qty{width:45pt}  table.items col.c-up{width:82pt}
   table.items col.c-tax{width:55pt}  table.items col.c-tot{width:76pt}
   table.items thead th{background:var(--dark);color:#fff;font-size:9pt;font-weight:bold;
-    text-align:center;vertical-align:middle;height:30pt;padding:2pt 3pt;line-height:10.5pt}
-  table.items td{padding:3.6pt 6pt 3.6pt 5pt;vertical-align:top}
+    text-align:center;vertical-align:middle;height:30pt;padding:2pt 1pt;line-height:10.5pt;overflow:visible}
+  table.items td{padding:2pt 6pt 2pt 5pt;vertical-align:top;overflow-wrap:break-word}
   table.items td.r{text-align:right}
-  table.items tr.sec td{font-weight:bold;padding-top:9pt;padding-bottom:2pt;text-transform:uppercase}
+  table.items tr.sec td{font-weight:bold;padding-top:8pt;padding-bottom:2pt;text-transform:uppercase}
+  table.items tr.sec.bundle td{text-transform:none}
   table.items tr.sectotal td{font-weight:bold;padding-top:4.5pt;padding-bottom:4.5pt}
   table.items tr.line td{page-break-inside:avoid}
 
@@ -330,20 +331,45 @@ function renderList(){
   $('#pgLast' ).onclick = ()=>{state.page=pages; renderList();};
 }
 
-/* ================= Invoice rendering ================= */
+/* ================= Invoice rendering =================
+   Groups mirror Workshop Software's invoice layout:
+   - Items are walked in `ordering` order. A row flagged is_bom_parent starts a
+     bundle group ("CODE  -  Description"); every following item belongs to it
+     until the next parent. Bundle totals show Subtotal / HST / Total columns.
+   - Items before the first parent (or all items when there are no parents)
+     fall into the classic product-type sections with a single section total. */
+function sums(list){
+  return {
+    sub: r2(list.reduce((s,it)=>s+(it.sub||0),0)),
+    tax: r2(list.reduce((s,it)=>s+(it.gst||0),0)),
+    tot: r2(list.reduce((s,it)=>s+(it.amount||0),0))
+  };
+}
 function sectionsFor(job){
   const items = (itemsByJob.get(job)||[]).slice()
     .sort((a,b)=>(a.ordering??0)-(b.ordering??0));
   const out = [];
-  for (const sec of SECTIONS){
-    const list = items.filter(it=>it.ptype===sec.pt);
-    if (list.length) out.push({sec, list, total: list.reduce((s,it)=>s+r2(it.amount||0),0)});
+
+  const lead = [];
+  let i = 0;
+  while (i < items.length && !items[i].bom) lead.push(items[i++]);
+
+  if (lead.length){
+    const known = new Set(SECTIONS.map(s=>s.pt));
+    for (const sec of SECTIONS){
+      const list = lead.filter(it=>it.ptype===sec.pt);
+      if (list.length) out.push({kind:'type', sec, list, ...sums(list)});
+    }
+    const other = lead.filter(it=>!known.has(it.ptype));
+    if (other.length) out.push({kind:'type', sec:{en:'OTHER', fr:'AUTRE', totalLbl:'Other Total'}, list:other, ...sums(other)});
   }
-  // any product types not covered above (defensive)
-  const known = new Set(SECTIONS.map(s=>s.pt));
-  const other = items.filter(it=>!known.has(it.ptype));
-  if (other.length) out.push({sec:{en:'OTHER', fr:'AUTRE', totalLbl:'Other Total'}, list:other,
-                              total: other.reduce((s,it)=>s+r2(it.amount||0),0)});
+
+  while (i < items.length){
+    const parent = items[i++];
+    const list = [];
+    while (i < items.length && !items[i].bom) list.push(items[i++]);
+    out.push({kind:'bundle', parent, list, ...sums(list)});
+  }
   return out;
 }
 function renderInvoice(v){
@@ -358,8 +384,9 @@ function renderInvoice(v){
       <div class="doc-meta">
         <div class="doc-title">${esc(title)}</div>
         <div class="row"><b>Date / Date:</b> ${fmtDate(v.date)}</div>
-        <div class="row"><b>Job # / # Travail:</b> ${esc(v.job)}</div>
-        ${v.inv!=null && v.inv!=='' ? `<div class="row"><b>Invoice # / # Facture:</b> ${esc(v.inv)}</div>` : ''}
+        ${v.inv!=null && v.inv!=='' ?
+          `<div class="row"><b>Invoice # / # Facture:</b> ${esc(v.inv)}</div>` :
+          `<div class="row"><b>Job # / # Travail:</b> ${esc(v.job)}</div>`}
       </div>
     </div>
     <div class="company-band">
@@ -386,35 +413,45 @@ function renderInvoice(v){
         <table>
           <tr><td class="l">License Plate</td><td>${esc(v.plate)}</td></tr>
           <tr><td class="l">Make/Marque / Model/Modèle</td><td>${esc(vehicle)}</td></tr>
-          <tr><td class="l">Body / Carrosserie</td><td>${esc(v.bodyType||'')}</td></tr>
-          <tr><td class="l">Odometer / Odomètre</td><td>${v.odometer ? fmtInt(v.odometer) : ''}</td></tr>
+          ${v.odometer ? `<tr><td class="l">Odometer / Odomètre</td><td>${esc(v.odometer)}</td></tr>` : ''}
           <tr><td class="l">Prod. Date / Date de Production</td><td>${esc(v.buildDate||'')}</td></tr>
+          <tr><td class="l">Service Advisor</td><td></td></tr>
         </table>
       </div>
     </div>`;
+
+  const lineRow = it => `<tr class="line">
+        <td>${esc(it.code)}</td>
+        <td>${esc(it.desc)}${it.note ? '<br>'+esc(it.note) : ''}</td>
+        <td class="r">${it.qty==null?'':Number(it.qty).toFixed(2)}</td>
+        <td class="r">${money(it.unitPrice)}</td>
+        <td class="r">${money(it.gst)}</td>
+        <td class="r">${money(it.amount)}</td>
+      </tr>`;
 
   let itemsHtml = `
     <table class="items">
       <colgroup><col class="c-item"><col class="c-desc"><col class="c-qty"><col class="c-up"><col class="c-tax"><col class="c-tot"></colgroup>
       <thead><tr>
         <th>Item / Item</th><th>Description / Description</th>
-        <th>Quantity /<br>Quantité</th><th>Unit Price / Prix<br>Unitaire</th>
+        <th>Quantity&nbsp;/<br>Quantité</th><th>Unit Price / Prix<br>Unitaire</th>
         <th>HST</th><th>Total / Total</th>
       </tr></thead>`;
-  for (const {sec, list, total} of secs){
-    itemsHtml += `<tbody>
-      <tr class="sec"><td colspan="6">${esc(sec.en)} / ${esc(sec.fr)}</td></tr>`;
-    for (const it of list){
-      itemsHtml += `<tr class="line">
-        <td>${esc(it.code)}</td><td>${esc(it.desc)}</td>
-        <td class="r">${it.qty==null?'':Number(it.qty).toFixed(2)}</td>
-        <td class="r">${money(it.unitPrice)}</td>
-        <td class="r">${money(it.gst)}</td>
-        <td class="r">${money(it.amount)}</td>
-      </tr>`;
+  for (const g of secs){
+    if (g.kind === 'bundle'){
+      itemsHtml += `<tbody>
+      <tr class="sec bundle"><td colspan="6">${esc(g.parent.code)}&nbsp;&nbsp;-&nbsp;&nbsp;${esc(g.parent.desc)}</td></tr>`;
+      g.list.forEach(it => itemsHtml += lineRow(it));
+      itemsHtml += `<tr class="sectotal"><td colspan="3" class="r">${esc(g.parent.code)} Total</td>
+        <td class="r">${money(g.sub)}</td><td class="r">${money(g.tax)}</td><td class="r">${money(g.tot)}</td></tr>
+      </tbody>`;
+    } else {
+      itemsHtml += `<tbody>
+      <tr class="sec"><td colspan="6">${esc(g.sec.en)} / ${esc(g.sec.fr)}</td></tr>`;
+      g.list.forEach(it => itemsHtml += lineRow(it));
+      itemsHtml += `<tr class="sectotal"><td colspan="5" class="r">${esc(g.sec.totalLbl)}</td><td class="r">${money(g.tot)}</td></tr>
+      </tbody>`;
     }
-    itemsHtml += `<tr class="sectotal"><td colspan="5" class="r">${esc(sec.totalLbl)}</td><td class="r">${money(total)}</td></tr>
-    </tbody>`;
   }
   itemsHtml += '</table>';
   if (!secs.length) itemsHtml += '<div style="font-size:10pt;padding:14pt 6pt;color:#555">No line items on this record.</div>';
