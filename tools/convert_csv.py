@@ -7,13 +7,14 @@ Usage:
 Writes data/invoices.js and data/items.js (JS files that assign to a global
 variable so the app can load them over file:// without fetch/CORS issues).
 """
-import csv, json, sys, os
+import csv, html, json, re, sys, os
 
 csv.field_size_limit(10**9)
 
 INV_COLS = ["job","inv","type","status","date","name","plate","desc","total",
             "balance","gst","subtotal","discount","deposits","taxRate","state",
-            "suburb","postcode","make","model","buildDate","bodyType","odometer"]
+            "suburb","postcode","make","model","buildDate","bodyType","odometer",
+            "note","jobNote"]
 ITEM_COLS = ["job","code","desc","qty","unitPrice","gst","amount","sub","ptype","ordering","bom","note"]
 
 
@@ -32,6 +33,16 @@ def s(v):
     return (v or "").strip()
 
 
+def plain(v):
+    """HTML note -> plain text with newlines (notes are stored as <p>..</p> HTML)."""
+    t = re.sub(r"<\s*(?:br|/p|/div|/li)[^>]*>", "\n", v or "", flags=re.I)
+    t = re.sub(r"<[^>]+>", "", t)
+    t = html.unescape(t)
+    t = re.sub(r"[ \t]+", " ", t)
+    t = re.sub(r"\n\s*\n+", "\n", t)
+    return t.strip()
+
+
 def convert(inv_csv, item_csv, out_dir):
     inv_rows = []
     with open(inv_csv, encoding="utf-8-sig", newline="") as f:
@@ -45,7 +56,7 @@ def convert(inv_csv, item_csv, out_dir):
                 num(r["subtotal"]), num(r["discount_total"]), num(r["deposits_total"]),
                 num(r["tax_rate"]), s(r["state"]), s(r["suburb"]), s(r["postcode"]),
                 s(r["make"]), s(r["model"]), s(r["build_date"]), s(r["body_type"]),
-                num(r["odometer"]),
+                num(r["odometer"]), plain(r["note"]), plain(r["job_card_note"]),
             ])
 
     item_rows = []

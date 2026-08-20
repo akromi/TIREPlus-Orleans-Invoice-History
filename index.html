@@ -59,6 +59,12 @@
   .inv-toolbar .print:hover{background:#1f2c73}
   .inv-toolbar .nav-pos{margin-left:auto;font-size:15px;color:var(--muted)}
 
+  .internal-notes{width:595pt;max-width:96vw;margin:16px auto -6px;background:#fff8e1;
+    border:1px solid #e3d190;border-radius:8px;padding:10px 16px 12px;font-size:15px;line-height:1.45}
+  .internal-notes h3{margin:2px 0 6px;font-size:13.5px;color:#8a6d00;text-transform:uppercase;letter-spacing:.5px}
+  .internal-notes .lbl{font-weight:bold;color:#5c5330}
+  .internal-notes .ref{background:#ffe08a;border-radius:3px;padding:0 3px;font-weight:bold;white-space:nowrap}
+
   /* ---------- Invoice sheet (mirrors the sample PDF, A4 = 595pt wide) ---------- */
   .sheet-holder{padding:20px 0 40px}
   .sheet{width:595pt;min-height:842pt;margin:0 auto;background:#fff;color:#000;
@@ -179,6 +185,7 @@
     <button class="print" id="btnPrint">&#128424; Print / Save as PDF</button>
     <span class="nav-pos" id="navPos"></span>
   </div>
+  <div class="internal-notes no-print" id="intNotes" hidden></div>
   <div class="sheet-holder">
     <div class="sheet" id="sheet"></div>
   </div>
@@ -232,7 +239,7 @@ for (const it of ITEMS){
 INVOICES.forEach((v,i)=>{
   v._idx = i;
   v._hay = [v.name, v.plate, v.job, v.inv, v.desc, v.make, v.model, v.date,
-            v.suburb, v.state, v.postcode].join(' ').toLowerCase();
+            v.suburb, v.state, v.postcode, v.note, v.jobNote].join(' ').toLowerCase();
 });
 
 /* ================= Helpers ================= */
@@ -481,6 +488,18 @@ function renderInvoice(v){
     const contentH = notesEl.getBoundingClientRect().bottom - sheet.getBoundingClientRect().top + printPadBottom;
     sheet.querySelector('.pageno').textContent = contentH <= onePageCSSpx ? 'Page 1 of 1' : '';
   });
+
+  const noteHtml = t => esc(t)
+    .replace(/\b([A-Za-z]{1,12}\s?#\s?[A-Za-z0-9][A-Za-z0-9\-]*)/g, '<span class="ref">$1</span>')
+    .replace(/\n/g, '<br>');
+  const intBits = [];
+  if (v.jobNote) intBits.push(`<div><span class="lbl">Job card note:</span> ${noteHtml(v.jobNote)}</div>`);
+  if (v.note)    intBits.push(`<div><span class="lbl">Invoice note:</span> ${noteHtml(v.note)}</div>`);
+  const intBox = $('#intNotes');
+  intBox.hidden = !intBits.length;
+  intBox.innerHTML = intBits.length
+    ? '<h3>Internal notes — shown here only, never printed</h3>' + intBits.join('')
+    : '';
 
   document.title = `${title} — Job ${v.job} — ${v.name||''}`;
 }

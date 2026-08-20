@@ -19,7 +19,9 @@ over `file://` — nothing is uploaded anywhere.
 
 ## Using the app
 
-- **Search** by customer, plate, job #, invoice #, vehicle or description.
+- **Search** by customer, plate, job #, invoice #, vehicle, description — or a
+  supplier (purchase) invoice reference from the job-card notes, e.g.
+  `wp#8332813` or `ps#669192`.
 - **Filter** by type (Invoice / Quote / Credit), status (Closed / Open / Parked)
   and posting-date range; **sort** by clicking any column header.
 - **Click a row** to open the invoice, rendered like the sample PDF.
@@ -27,6 +29,9 @@ over `file://` — nothing is uploaded anywhere.
   (paper size A4, margins *None* / *Default*, "Background graphics" ON if the
   grey panels don't show).
 - **Prev / Next** steps through the invoices of the current filtered list.
+- **Internal notes** (job-card and invoice notes, including supplier invoice
+  references like `WP#…`, `PS#…`, `NP#…`) appear in an amber box above the
+  invoice — on screen only, they are never part of the printed PDF.
 
 ## Data
 
