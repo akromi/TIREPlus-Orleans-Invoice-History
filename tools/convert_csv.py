@@ -19,7 +19,7 @@ INV_COLS = ["job","inv","type","status","date","name","plate","desc","total",
             "note","jobNote"]
 ITEM_COLS = ["job","code","desc","qty","unitPrice","gst","amount","sub","ptype","ordering","bom","note"]
 CUST_COLS = ["name","phone","email","addr1","addr2","suburb","state","postcode"]
-VEH_COLS  = ["plate","name","vin","next"]
+VEH_COLS  = ["plate","name","vin","next","tyre"]
 
 
 def num(v):
@@ -96,7 +96,7 @@ def convert(inv_csv, item_csv, out_dir, cust_csv=None, veh_csv=None):
             plate = s(r["plate_number"]).upper()
             if not plate:
                 continue
-            veh_rows.append([plate, s(r["display_name"]), s(r["vin"]), s(r["next_service"])])
+            veh_rows.append([plate, s(r["display_name"]), s(r["vin"]), s(r["next_service"]), s(r["tyre_size"])])
 
     os.makedirs(out_dir, exist_ok=True)
 

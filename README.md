@@ -33,6 +33,10 @@ over `file://` — nothing is uploaded anywhere.
   (paper size A4, margins *None* / *Default*, "Background graphics" ON if the
   grey panels don't show).
 - **Prev / Next** steps through the invoices of the current filtered list.
+- **Tire Storage** (header tab) shows the seasonal tire-storage history:
+  every storage charge and pick-up/removal grouped by customer with their
+  plates, tire sizes, totals and last activity; optionally interleaved with
+  the seasonal tire-swap visits. Rows open the underlying invoice.
 - **Internal notes** (job-card and invoice notes, including supplier invoice
   references like `WP#…`, `PS#…`, `NP#…`) appear in an amber box above the
   invoice — on screen only, they are never part of the printed PDF.

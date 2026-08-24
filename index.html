@@ -21,6 +21,10 @@
   .app-header h1{font-size:22.5px;margin:0;font-weight:bold;letter-spacing:.3px}
   .app-header h1 span{color:#ffd23f;font-weight:normal}
   .app-header .sub{margin-left:auto;font-size:15px;color:#cfcfcf;text-align:right}
+  .app-header .views{display:flex;gap:8px;margin-left:26px}
+  .app-header .views a{color:#ddd;text-decoration:none;padding:6px 15px;border-radius:17px;font-size:15px}
+  .app-header .views a:hover{background:rgba(255,255,255,.15)}
+  .app-header .views a.active{background:#fff;color:#222;font-weight:bold}
 
   .toolbar{display:flex;flex-wrap:wrap;gap:8px;align-items:center;padding:12px 18px;background:#fff;border-bottom:1px solid var(--line);position:sticky;top:0;z-index:5}
   .toolbar input[type=search]{flex:1 1 260px;min-width:200px;padding:8px 10px;border:1px solid #bbb;border-radius:6px;font-size:17.5px}
@@ -51,6 +55,14 @@
   .pager button:disabled{opacity:.4;cursor:default}
   .pager .pg{font-size:16.25px;color:var(--muted);margin:0 8px}
   .empty{padding:40px;text-align:center;color:var(--muted);font-size:18.75px}
+
+  /* ---------- Tire storage view ---------- */
+  #storageView table.list tbody tr.cust-hdr td{background:#e9edf8;font-weight:bold;font-size:15.5px;
+    border-top:2px solid #c6cde0;padding:9px 8px;white-space:normal}
+  #storageView table.list tbody tr.cust-hdr .meta{font-weight:normal;color:#555;margin-left:10px}
+  .kind{display:inline-block;padding:1px 8px;border-radius:9px;font-size:12.5px;font-weight:bold}
+  .kind.storage{background:#ffe9a8;color:#7a5c00}
+  .kind.swap{background:#dbe7ff;color:#1d3fa0}
 
   /* ---------- Invoice view chrome ---------- */
   .inv-toolbar{display:flex;gap:8px;align-items:center;padding:10px 18px;background:#fff;border-bottom:1px solid var(--line);position:sticky;top:0;z-index:5}
@@ -142,6 +154,10 @@
 <header class="app-header no-print">
   <img src="assets/logo.png" alt="TIREPlus logo">
   <h1>TIRE<span>Plus</span> Orleans — Invoice History</h1>
+  <nav class="views">
+    <a href="#" id="navInv">Invoices</a>
+    <a href="#/storage" id="navStor">Tire Storage</a>
+  </nav>
   <div class="sub" id="headerStats"></div>
 </header>
 
@@ -186,6 +202,25 @@
     <div class="empty" id="emptyMsg" hidden>No invoices match the current filters.</div>
   </div>
   <div class="pager no-print" id="pager"></div>
+</section>
+
+<!-- ============ TIRE STORAGE VIEW ============ -->
+<section id="storageView" hidden>
+  <div class="toolbar no-print">
+    <input type="search" id="sq" placeholder="Search storage customers by name or plate…">
+    <label><input type="checkbox" id="sSwaps"> Show seasonal tire swaps too</label>
+  </div>
+  <div class="summary no-print" id="sSummary"></div>
+  <div class="list-wrap">
+    <table class="list">
+      <thead><tr>
+        <th>Date</th><th>Job #</th><th>Type</th><th>Vehicle</th><th>Plate</th>
+        <th>Item</th><th>Description</th><th class="r">Amount</th>
+      </tr></thead>
+      <tbody id="sBody"></tbody>
+    </table>
+    <div class="empty" id="sEmpty" hidden>No tire storage records match.</div>
+  </div>
 </section>
 
 <!-- ============ INVOICE VIEW ============ -->
@@ -564,12 +599,115 @@ function renderInvoice(v){
   document.title = `${title} — Job ${v.job} — ${v.name||''}`;
 }
 
+/* ================= Tire storage history ================= */
+const SWAP_CODES = new Set(['SVC-TIRESNOR','SVC-TIRESOR','TIRE_NOR','TIRE_NOR_NC','TIRE_OR',
+                            'TIRE_NOR19+','TIRE_OR19+','TIRE_TRUCK_NOR','TIRE_TRUCK_OR']);
+let STORAGE_DATA = null;
+function buildStorage(){
+  if (STORAGE_DATA) return STORAGE_DATA;
+  const invByJob = new Map();
+  for (const v of INVOICES) if (!invByJob.has(v.job)) invByJob.set(v.job, v);
+  const rows = [], swapByJob = new Map();
+  for (const it of ITEMS){
+    const v = invByJob.get(it.job);
+    if (!v) continue;
+    const code = String(it.code||'').toUpperCase();
+    // storage fees (TIRESTORAGE, PARKINGSTORAGE) plus pick-up/removal events
+    // recorded as ordinary labour lines mentioning storage
+    if (code.includes('STORAGE') || /\bstorage\b|\bstored\b/i.test(it.desc||'')){
+      rows.push({kind:'storage', v, date:v.date||'', code:it.code, desc:it.desc, amount:r2(it.amount||0)});
+    } else if (SWAP_CODES.has(code)){
+      let s = swapByJob.get(it.job);
+      if (!s) swapByJob.set(it.job, s={kind:'swap', v, date:v.date||'', code:'Tire swap', desc:'', amount:0});
+      s.amount = r2(s.amount + r2(it.amount||0));
+      if (!s.desc && it.desc) s.desc = it.desc;
+    }
+  }
+  STORAGE_DATA = {rows, swaps:[...swapByJob.values()]};
+  return STORAGE_DATA;
+}
+function tyreFor(plate, name){
+  const a = vehByPlate.get(String(plate||'').toUpperCase());
+  if (!a) return '';
+  const r = a.find(x=>x.name===name) || a[0];
+  return r.tyre || '';
+}
+function renderStorage(){
+  const {rows, swaps} = buildStorage();
+  const q = $('#sq').value.trim().toLowerCase();
+  const withSwaps = $('#sSwaps').checked;
+
+  const groups = new Map();       // customer name -> group
+  for (const r of rows){
+    let g = groups.get(r.v.name);
+    if (!g) groups.set(r.v.name, g={name:r.v.name, rows:[], plates:new Set(), nStor:0, storTotal:0, last:''});
+    g.rows.push(r); g.nStor++; g.storTotal += r.amount;
+    if (r.v.plate) g.plates.add(r.v.plate);
+    if (r.date > g.last) g.last = r.date;
+  }
+  if (withSwaps) for (const s of swaps){
+    const g = groups.get(s.v.name);
+    if (g){ g.rows.push(s); if (s.v.plate) g.plates.add(s.v.plate); if (s.date > g.last) g.last = s.date; }
+  }
+
+  let list = [...groups.values()];
+  if (q) list = list.filter(g => (g.name + ' ' + [...g.plates].join(' ')).toLowerCase().includes(q));
+  list.sort((a,b)=> a.last < b.last ? 1 : a.last > b.last ? -1 : 0);
+
+  const totStor = list.reduce((s,g)=>s+g.storTotal,0);
+  $('#sSummary').innerHTML =
+    `<span><b>${list.reduce((s,g)=>s+g.nStor,0)}</b> storage entries</span>`+
+    `<span><b>${list.length}</b> customers</span>`+
+    `<span>Storage billed: <b>${money(totStor)}</b></span>`+
+    `<span>Click a row to open the invoice.</span>`;
+
+  let html = '';
+  for (const g of list){
+    g.rows.sort((a,b)=> a.date < b.date ? 1 : a.date > b.date ? -1 : (b.v.job)-(a.v.job));
+    const vehTxt = [...g.plates].map(p=>{
+      const t = tyreFor(p, g.name);
+      return esc(p) + (t ? ` <span style="color:#777;font-weight:normal">(${esc(t)})</span>` : '');
+    }).join(', ');
+    html += `<tr class="cust-hdr"><td colspan="8">${esc(g.name)}
+      <span class="meta">${vehTxt}${vehTxt?' &middot; ':''}${g.nStor} storage charge${g.nStor===1?'':'s'}
+      &middot; ${money(g.storTotal)} &middot; last activity ${fmtDate(g.last)}</span></td></tr>`;
+    for (const r of g.rows){
+      html += `<tr data-idx="${r.v._idx}">
+        <td>${fmtDate(r.date)}</td><td>${esc(r.v.job)}</td>
+        <td><span class="kind ${r.kind}">${r.kind==='storage'?'Storage':'Swap'}</span></td>
+        <td>${esc([r.v.buildDate,r.v.make,r.v.model].filter(Boolean).join(' '))}</td>
+        <td>${esc(r.v.plate)}</td><td>${esc(r.code)}</td><td>${esc(r.desc)}</td>
+        <td class="r">${money(r.amount)}</td>
+      </tr>`;
+    }
+  }
+  $('#sBody').innerHTML = html;
+  $('#sEmpty').hidden = list.length > 0;
+}
+
 /* ================= Routing / view switching ================= */
 let currentIdx = null;
+let returnHash = '';                 // where Back leads from the invoice view
+function setNav(which){
+  $('#navInv').classList.toggle('active', which==='inv');
+  $('#navStor').classList.toggle('active', which==='stor');
+}
 function showList(){
   $('#invView').hidden = true;
+  $('#storageView').hidden = true;
   $('#listView').hidden = false;
+  returnHash = '';
+  setNav('inv');
   document.title = 'TIREPlus Orleans — Invoice History';
+}
+function showStorage(){
+  $('#invView').hidden = true;
+  $('#listView').hidden = true;
+  $('#storageView').hidden = false;
+  returnHash = '#/storage';
+  setNav('stor');
+  renderStorage();
+  document.title = 'TIREPlus Orleans — Tire Storage History';
 }
 function showInvoice(idx){
   const v = INVOICES[idx];
@@ -581,12 +719,15 @@ function showInvoice(idx){
   $('#btnNext').disabled = pos<0 || pos>=filtered.length-1;
   $('#navPos').textContent = pos>=0 ? `${pos+1} of ${filtered.length.toLocaleString()} in current list` : '';
   $('#listView').hidden = true;
+  $('#storageView').hidden = true;
   $('#invView').hidden = false;
   window.scrollTo(0,0);
 }
 function route(){
   const m = /^#\/i\/(\d+)$/.exec(location.hash);
-  if (m) showInvoice(+m[1]); else showList();
+  if (m) showInvoice(+m[1]);
+  else if (location.hash === '#/storage') showStorage();
+  else showList();
 }
 window.addEventListener('hashchange', route);
 
@@ -631,7 +772,7 @@ $('#listBody').addEventListener('click', e=>{
   const tr = e.target.closest('tr[data-idx]'); if(!tr) return;
   location.hash = '#/i/'+tr.dataset.idx;
 });
-$('#btnBack').addEventListener('click', ()=>{ location.hash=''; });
+$('#btnBack').addEventListener('click', ()=>{ location.hash = returnHash; });
 $('#btnPrint').addEventListener('click', ()=>window.print());
 $('#btnPrev').addEventListener('click', ()=>{
   const pos = filtered.findIndex(x=>x._idx===currentIdx);
@@ -640,6 +781,14 @@ $('#btnPrev').addEventListener('click', ()=>{
 $('#btnNext').addEventListener('click', ()=>{
   const pos = filtered.findIndex(x=>x._idx===currentIdx);
   if (pos>=0 && pos<filtered.length-1) location.hash = '#/i/'+filtered[pos+1]._idx;
+});
+
+let sqTimer;
+$('#sq').addEventListener('input', ()=>{ clearTimeout(sqTimer); sqTimer=setTimeout(renderStorage,150); });
+$('#sSwaps').addEventListener('change', renderStorage);
+$('#sBody').addEventListener('click', e=>{
+  const tr = e.target.closest('tr[data-idx]'); if(!tr) return;
+  location.hash = '#/i/'+tr.dataset.idx;
 });
 
 /* header stats */
