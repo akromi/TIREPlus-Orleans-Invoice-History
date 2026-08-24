@@ -146,6 +146,7 @@
 
   /* ---------- Print ---------- */
   @page{size:A4;margin:0}
+  /* orientation is switched to landscape for the storage report via #pageOrient (JS) */
   @media print{
     body{background:#fff}
     .no-print{display:none !important}
@@ -174,6 +175,7 @@
   }
   @media (max-width:840px){ .sheet{transform-origin:top left;} }
 </style>
+<style id="pageOrient"></style>
 </head>
 <body>
 
@@ -854,7 +856,13 @@ $('#btnNext').addEventListener('click', ()=>{
 let sqTimer;
 $('#sq').addEventListener('input', ()=>{ clearTimeout(sqTimer); sqTimer=setTimeout(renderStorage,150); });
 $('#sSwaps').addEventListener('change', renderStorage);
-$('#btnPrintStorage').addEventListener('click', ()=>window.print());
+function setPageOrientation(){
+  // storage list prints landscape; invoices keep portrait A4
+  const landscape = !$('#storageView').hidden;
+  document.getElementById('pageOrient').textContent = landscape ? '@page{size:A4 landscape}' : '';
+}
+window.addEventListener('beforeprint', setPageOrientation);
+$('#btnPrintStorage').addEventListener('click', ()=>{ setPageOrientation(); window.print(); });
 $('#sAband').addEventListener('change', renderStorage);
 $('#sBody').addEventListener('click', e=>{
   const tr = e.target.closest('tr[data-idx]'); if(!tr) return;
