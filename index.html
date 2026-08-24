@@ -237,7 +237,13 @@
   <div class="toolbar no-print">
     <input type="search" id="sq" placeholder="Search storage customers by name or plate…">
     <label><input type="checkbox" id="sSwaps"> Show seasonal tire swaps too</label>
-    <label title="No storage activity for 12+ months and tires never picked up"><input type="checkbox" id="sAband"> Potentially abandoned only</label>
+    <label>Abandoned after
+      <select id="sThresh">
+        <option value="12">12 months</option>
+        <option value="24">24 months</option>
+      </select>
+    </label>
+    <label title="No storage or swap activity beyond the selected threshold and tires never picked up"><input type="checkbox" id="sAband"> Potentially abandoned only</label>
     <button id="btnPrintStorage" class="printbtn">&#128424; Print list</button>
   </div>
   <div class="print-head print-only">
@@ -367,7 +373,7 @@ function money(x, blankIfNull){
 function fmtDate(iso){
   if(!iso) return '';
   const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(iso);
-  return m ? `${m[2]}/${m[3]}/${m[1]}` : iso;
+  return m ? `${m[1]}/${m[2]}/${m[3]}` : iso;
 }
 const fmtInt = x => x==null ? '' : Number(x).toLocaleString('en-CA');
 
@@ -677,6 +683,7 @@ function renderStorage(){
   const q = $('#sq').value.trim().toLowerCase();
   const withSwaps = $('#sSwaps').checked;
   const abandOnly = $('#sAband').checked;
+  const thresh = +$('#sThresh').value || 12;
 
   // last storage-related event per customer (always incl. swaps, whatever the
   // display toggle says) decides the status: a pick-up/removal closes the file,
@@ -705,7 +712,7 @@ function renderStorage(){
     const le = lastEvent.get(g.name);
     g.lastTrue = le.date;                       // true last activity incl. swaps
     g.months = monthsBetween(le.date, DATA_END);
-    g.status = le.out ? 'closed' : (g.months >= 12 ? 'aband' : 'active');
+    g.status = le.out ? 'closed' : (g.months >= thresh ? 'aband' : 'active');
   }
   const nAband = list.filter(g=>g.status==='aband').length;
   if (abandOnly) list = list.filter(g=>g.status==='aband');
@@ -748,7 +755,7 @@ function renderStorage(){
   $('#sEmpty').hidden = list.length > 0;
   $('#sPrintMeta').textContent =
     `${list.reduce((s,g)=>s+g.nStor,0)} storage entries · ${list.length} customers · storage billed ${money(totStor)}` +
-    ` · ${nAband} potentially abandoned (no activity for 12+ months as of ${fmtDate(DATA_END)})` +
+    ` · ${nAband} potentially abandoned (no activity for ${thresh}+ months as of ${fmtDate(DATA_END)})` +
     (abandOnly ? ' · showing potentially abandoned only' : '') +
     (withSwaps ? ' · tire-swap visits included' : '') +
     (q ? ` · filtered by "${q}"` : '') +
@@ -864,6 +871,7 @@ function setPageOrientation(){
 window.addEventListener('beforeprint', setPageOrientation);
 $('#btnPrintStorage').addEventListener('click', ()=>{ setPageOrientation(); window.print(); });
 $('#sAband').addEventListener('change', renderStorage);
+$('#sThresh').addEventListener('change', renderStorage);
 $('#sBody').addEventListener('click', e=>{
   const tr = e.target.closest('tr[data-idx]'); if(!tr) return;
   location.hash = '#/i/'+tr.dataset.idx;
