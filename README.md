@@ -37,6 +37,12 @@ over `file://` — nothing is uploaded anywhere.
   every storage charge and pick-up/removal grouped by customer with their
   plates, tire sizes, totals and last activity; optionally interleaved with
   the seasonal tire-swap visits. Rows open the underlying invoice.
+  Each customer gets a status — **Active**, **Closed out** (tires picked up)
+  or **Possibly abandoned** (no storage/swap activity for 12+ months and the
+  tires never picked up) — with a filter to list only the abandoned
+  candidates. **Print list** produces a clean report of exactly what is on
+  screen (current search, filters and swap toggle), with a title header and
+  repeating column headers.
 - **Internal notes** (job-card and invoice notes, including supplier invoice
   references like `WP#…`, `PS#…`, `NP#…`) appear in an amber box above the
   invoice — on screen only, they are never part of the printed PDF.

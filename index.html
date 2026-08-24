@@ -63,6 +63,18 @@
   .kind{display:inline-block;padding:1px 8px;border-radius:9px;font-size:12.5px;font-weight:bold}
   .kind.storage{background:#ffe9a8;color:#7a5c00}
   .kind.swap{background:#dbe7ff;color:#1d3fa0}
+  .st{display:inline-block;padding:2px 9px;border-radius:9px;font-size:12.5px;font-weight:bold;margin-left:8px}
+  .st-active{background:#dff3e3;color:#1c7a2d}
+  .st-closed{background:#e4e4e4;color:#555}
+  .st-aband{background:#ffd9d9;color:#a11212}
+  .st{-webkit-print-color-adjust:exact;print-color-adjust:exact}
+  .toolbar .printbtn{background:var(--brand-blue);border-color:var(--brand-blue);color:#fff;font-weight:bold}
+  .toolbar .printbtn:hover{background:#1f2c73}
+  .print-only{display:none}
+  .print-head{display:flex;gap:10pt;align-items:center;margin:0 0 9pt}
+  .print-head img{width:36pt;height:36pt}
+  .print-head .t{font-size:14pt;font-weight:bold}
+  .print-head .m{font-size:9pt;color:#333;margin-top:2pt}
 
   /* ---------- Invoice view chrome ---------- */
   .inv-toolbar{display:flex;gap:8px;align-items:center;padding:10px 18px;background:#fff;border-bottom:1px solid var(--line);position:sticky;top:0;z-index:5}
@@ -145,6 +157,20 @@
     table.items thead{display:table-header-group}
     table.items tr.sectotal,table.items tr.sec{page-break-inside:avoid}
     .totals{page-break-inside:avoid}
+    /* --- tire storage list as a clean report --- */
+    .print-only{display:block !important}
+    #storageView{padding:8mm 8mm 10mm}
+    #storageView .list-wrap{overflow:visible;padding:0}
+    #storageView table.list{box-shadow:none;font-size:9.5pt}
+    #storageView table.list thead{display:table-header-group}
+    #storageView table.list th{position:static;background:#fff !important;color:#000;
+      border-bottom:1.5pt solid #000;font-size:9pt;padding:4pt 5pt}
+    #storageView table.list td{padding:3pt 5pt;white-space:normal;max-width:none;border-bottom:0.5pt solid #aaa}
+    #storageView table.list tr{page-break-inside:avoid}
+    #storageView table.list tr.cust-hdr{page-break-after:avoid}
+    #storageView table.list tr.cust-hdr td{background:#e9edf8;border-top:1pt solid #555;
+      -webkit-print-color-adjust:exact;print-color-adjust:exact}
+    .kind{-webkit-print-color-adjust:exact;print-color-adjust:exact}
   }
   @media (max-width:840px){ .sheet{transform-origin:top left;} }
 </style>
@@ -209,6 +235,15 @@
   <div class="toolbar no-print">
     <input type="search" id="sq" placeholder="Search storage customers by name or plate…">
     <label><input type="checkbox" id="sSwaps"> Show seasonal tire swaps too</label>
+    <label title="No storage activity for 12+ months and tires never picked up"><input type="checkbox" id="sAband"> Potentially abandoned only</label>
+    <button id="btnPrintStorage" class="printbtn">&#128424; Print list</button>
+  </div>
+  <div class="print-head print-only">
+    <img src="assets/logo.png" alt="">
+    <div>
+      <div class="t">TIREPlus Orleans — Tire Storage History</div>
+      <div class="m" id="sPrintMeta"></div>
+    </div>
   </div>
   <div class="summary no-print" id="sSummary"></div>
   <div class="list-wrap">
@@ -615,7 +650,8 @@ function buildStorage(){
     // storage fees (TIRESTORAGE, PARKINGSTORAGE) plus pick-up/removal events
     // recorded as ordinary labour lines mentioning storage
     if (code.includes('STORAGE') || /\bstorage\b|\bstored\b/i.test(it.desc||'')){
-      rows.push({kind:'storage', v, date:v.date||'', code:it.code, desc:it.desc, amount:r2(it.amount||0)});
+      const out = /remov|pick|sold/i.test(it.desc||'');
+      rows.push({kind:'storage', out, v, date:v.date||'', code:it.code, desc:it.desc, amount:r2(it.amount||0)});
     } else if (SWAP_CODES.has(code)){
       let s = swapByJob.get(it.job);
       if (!s) swapByJob.set(it.job, s={kind:'swap', v, date:v.date||'', code:'Tire swap', desc:'', amount:0});
@@ -632,10 +668,22 @@ function tyreFor(plate, name){
   const r = a.find(x=>x.name===name) || a[0];
   return r.tyre || '';
 }
+const DATA_END = INVOICES.reduce((m,v)=> v.date>m ? v.date : m, '');
+const monthsBetween = (a,b) => Math.max(0, Math.floor((new Date(b)-new Date(a))/(1000*60*60*24*30.44)));
 function renderStorage(){
   const {rows, swaps} = buildStorage();
   const q = $('#sq').value.trim().toLowerCase();
   const withSwaps = $('#sSwaps').checked;
+  const abandOnly = $('#sAband').checked;
+
+  // last storage-related event per customer (always incl. swaps, whatever the
+  // display toggle says) decides the status: a pick-up/removal closes the file,
+  // otherwise long inactivity means the stored set may be abandoned
+  const lastEvent = new Map();
+  for (const r of rows.concat(swaps)){
+    const cur = lastEvent.get(r.v.name);
+    if (!cur || r.date > cur.date || (r.date === cur.date && r.out)) lastEvent.set(r.v.name, r);
+  }
 
   const groups = new Map();       // customer name -> group
   for (const r of rows){
@@ -651,14 +699,24 @@ function renderStorage(){
   }
 
   let list = [...groups.values()];
+  for (const g of list){
+    const le = lastEvent.get(g.name);
+    g.lastTrue = le.date;                       // true last activity incl. swaps
+    g.months = monthsBetween(le.date, DATA_END);
+    g.status = le.out ? 'closed' : (g.months >= 12 ? 'aband' : 'active');
+  }
+  const nAband = list.filter(g=>g.status==='aband').length;
+  if (abandOnly) list = list.filter(g=>g.status==='aband');
   if (q) list = list.filter(g => (g.name + ' ' + [...g.plates].join(' ')).toLowerCase().includes(q));
-  list.sort((a,b)=> a.last < b.last ? 1 : a.last > b.last ? -1 : 0);
+  list.sort((a,b)=> abandOnly ? (a.lastTrue < b.lastTrue ? -1 : a.lastTrue > b.lastTrue ? 1 : 0)
+                              : (a.lastTrue < b.lastTrue ? 1 : a.lastTrue > b.lastTrue ? -1 : 0));
 
   const totStor = list.reduce((s,g)=>s+g.storTotal,0);
   $('#sSummary').innerHTML =
     `<span><b>${list.reduce((s,g)=>s+g.nStor,0)}</b> storage entries</span>`+
     `<span><b>${list.length}</b> customers</span>`+
     `<span>Storage billed: <b>${money(totStor)}</b></span>`+
+    `<span style="color:#a11212"><b>${nAband}</b> potentially abandoned</span>`+
     `<span>Click a row to open the invoice.</span>`;
 
   let html = '';
@@ -668,9 +726,12 @@ function renderStorage(){
       const t = tyreFor(p, g.name);
       return esc(p) + (t ? ` <span style="color:#777;font-weight:normal">(${esc(t)})</span>` : '');
     }).join(', ');
-    html += `<tr class="cust-hdr"><td colspan="8">${esc(g.name)}
+    const stChip = g.status==='aband' ? `<span class="st st-aband">Possibly abandoned &middot; ${g.months} mo</span>`
+                 : g.status==='closed' ? `<span class="st st-closed">Closed out</span>`
+                 : `<span class="st st-active">Active</span>`;
+    html += `<tr class="cust-hdr"><td colspan="8">${esc(g.name)} ${stChip}
       <span class="meta">${vehTxt}${vehTxt?' &middot; ':''}${g.nStor} storage charge${g.nStor===1?'':'s'}
-      &middot; ${money(g.storTotal)} &middot; last activity ${fmtDate(g.last)}</span></td></tr>`;
+      &middot; ${money(g.storTotal)} &middot; last activity ${fmtDate(g.lastTrue)}</span></td></tr>`;
     for (const r of g.rows){
       html += `<tr data-idx="${r.v._idx}">
         <td>${fmtDate(r.date)}</td><td>${esc(r.v.job)}</td>
@@ -683,6 +744,13 @@ function renderStorage(){
   }
   $('#sBody').innerHTML = html;
   $('#sEmpty').hidden = list.length > 0;
+  $('#sPrintMeta').textContent =
+    `${list.reduce((s,g)=>s+g.nStor,0)} storage entries · ${list.length} customers · storage billed ${money(totStor)}` +
+    ` · ${nAband} potentially abandoned (no activity for 12+ months as of ${fmtDate(DATA_END)})` +
+    (abandOnly ? ' · showing potentially abandoned only' : '') +
+    (withSwaps ? ' · tire-swap visits included' : '') +
+    (q ? ` · filtered by "${q}"` : '') +
+    ` · printed ${fmtDate(new Date().toISOString().slice(0,10))}`;
 }
 
 /* ================= Routing / view switching ================= */
@@ -786,6 +854,8 @@ $('#btnNext').addEventListener('click', ()=>{
 let sqTimer;
 $('#sq').addEventListener('input', ()=>{ clearTimeout(sqTimer); sqTimer=setTimeout(renderStorage,150); });
 $('#sSwaps').addEventListener('change', renderStorage);
+$('#btnPrintStorage').addEventListener('click', ()=>window.print());
+$('#sAband').addEventListener('change', renderStorage);
 $('#sBody').addEventListener('click', e=>{
   const tr = e.target.closest('tr[data-idx]'); if(!tr) return;
   location.hash = '#/i/'+tr.dataset.idx;
