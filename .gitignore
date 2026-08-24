@@ -1,1 +1,2 @@
-# nothing ignored yet — data files are intentionally committed
+__pycache__/
+*.pyc
