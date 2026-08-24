@@ -37,10 +37,10 @@ over `file://` — nothing is uploaded anywhere.
   every storage charge and pick-up/removal grouped by customer with their
   plates, tire sizes, totals and last activity; optionally interleaved with
   the seasonal tire-swap visits. Rows open the underlying invoice.
-  Each customer gets a status — **Active**, **Closed out** (tires picked up)
-  or **Possibly abandoned** (no storage/swap activity beyond the selected
-  threshold — 12 or 24 months — and the tires never picked up) — with a
-  filter to list only the abandoned candidates. **Print list** produces a clean landscape report of exactly what is on
+  Each customer's status is taken from the **physical stocktake** when one is
+  loaded: **On the rack** (with slot numbers), **Gone — pickup not recorded**,
+  or **Closed out**. Without a stocktake the app falls back to inferring
+  **Possibly abandoned** from inactivity (12 or 24 month threshold). **Print list** produces a clean landscape report of exactly what is on
   screen (current search, filters and swap toggle), with a title header and
   repeating column headers; invoices always print portrait.
 - **Internal notes** (job-card and invoice notes, including supplier invoice
@@ -54,11 +54,18 @@ over `file://` — nothing is uploaded anywhere.
 | `data/invoices.js` | 12,229 invoices / quotes / credits (Mar 2023 – Aug 2026) |
 | `data/items.js` | 70,981 invoice line items |
 | `data/customers.js` | 4,688 customers (phone, email, address) |
-| `data/vehicles.js` | 5,255 vehicles (VIN, next service date) |
+| `data/vehicles.js` | 5,255 vehicles (VIN, next service date, tire size) |
+| `data/inventory.js` | physical tire-rack stocktake — 48 slots, 44 occupied |
 
 Customers are joined to invoices by display name and vehicles by plate, which
 fills in the phone, address, VIN and next-service fields on the printed
 invoice, and makes phone numbers, emails and VINs searchable.
+
+**Rack Inventory** (header tab) lists the physical stocktake slot by slot —
+customer, plate, vehicle, tires, rims, last swap — flags each set as
+**Billed**/**Not billed** for storage, filters by container or unbilled only,
+and prints landscape. After a new stocktake, update `tools/inventory_rows.py`
+and run `python3 tools/convert_inventory.py data`.
 
 To refresh with newer Workshop Software exports, run:
 

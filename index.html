@@ -67,6 +67,8 @@
   .st-active{background:#dff3e3;color:#1c7a2d}
   .st-closed{background:#e4e4e4;color:#555}
   .st-aband{background:#ffd9d9;color:#a11212}
+  .st-onrack{background:#d4ecff;color:#12507f}
+  .st-gone{background:#ffd9d9;color:#a11212}
   .st{-webkit-print-color-adjust:exact;print-color-adjust:exact}
   .toolbar .printbtn{background:var(--brand-blue);border-color:var(--brand-blue);color:#fff;font-weight:bold}
   .toolbar .printbtn:hover{background:#1f2c73}
@@ -75,6 +77,9 @@
   .print-head img{width:36pt;height:36pt}
   .print-head .t{font-size:14pt;font-weight:bold}
   .print-head .m{font-size:9pt;color:#333;margin-top:2pt}
+  #rackView table.list td.tires{white-space:normal;max-width:420px;font-size:14px}
+  #rackView tr.rack-open td{color:#999;font-style:italic;background:#fafafa}
+  #rackView tr.rack-open{cursor:default}
 
   /* ---------- Invoice view chrome ---------- */
   .inv-toolbar{display:flex;gap:8px;align-items:center;padding:10px 18px;background:#fff;border-bottom:1px solid var(--line);position:sticky;top:0;z-index:5}
@@ -172,6 +177,15 @@
     #storageView table.list tr.cust-hdr td{background:#e9edf8;border-top:1pt solid #555;
       -webkit-print-color-adjust:exact;print-color-adjust:exact}
     .kind{-webkit-print-color-adjust:exact;print-color-adjust:exact}
+    #rackView{padding:8mm 8mm 10mm}
+    #rackView .list-wrap{overflow:visible;padding:0}
+    #rackView table.list{box-shadow:none;font-size:8.5pt;table-layout:fixed;width:100%}
+    #rackView table.list thead{display:table-header-group}
+    #rackView table.list th{position:static;background:#fff !important;color:#000;
+      border-bottom:1.5pt solid #000;font-size:8.5pt;padding:4pt 4pt}
+    #rackView table.list td{padding:3pt 4pt;white-space:normal;max-width:none;
+      border-bottom:0.5pt solid #aaa;word-wrap:break-word}
+    #rackView table.list tr{page-break-inside:avoid}
   }
   @media (max-width:840px){ .sheet{transform-origin:top left;} }
 </style>
@@ -185,6 +199,7 @@
   <nav class="views">
     <a href="#" id="navInv">Invoices</a>
     <a href="#/storage" id="navStor">Tire Storage</a>
+    <a href="#/racks" id="navRack">Rack Inventory</a>
   </nav>
   <div class="sub" id="headerStats"></div>
 </header>
@@ -237,13 +252,13 @@
   <div class="toolbar no-print">
     <input type="search" id="sq" placeholder="Search storage customers by name or plate…">
     <label><input type="checkbox" id="sSwaps"> Show seasonal tire swaps too</label>
-    <label>Abandoned after
+    <label id="sThreshLbl">Abandoned after
       <select id="sThresh">
         <option value="12">12 months</option>
         <option value="24">24 months</option>
       </select>
     </label>
-    <label title="No storage or swap activity beyond the selected threshold and tires never picked up"><input type="checkbox" id="sAband"> Potentially abandoned only</label>
+    <label id="sAbandLbl" title="Tires not found in the physical count and no pick-up recorded"><input type="checkbox" id="sAband"> Unresolved only</label>
     <button id="btnPrintStorage" class="printbtn">&#128424; Print list</button>
   </div>
   <div class="print-head print-only">
@@ -266,6 +281,36 @@
   </div>
 </section>
 
+<!-- ============ RACK INVENTORY VIEW ============ -->
+<section id="rackView" hidden>
+  <div class="toolbar no-print">
+    <input type="search" id="rq" placeholder="Search rack by customer, plate, vehicle, tire make or slot…">
+    <label>Container
+      <select id="rCont"><option value="">All</option><option value="A">A</option><option value="B">B</option></select>
+    </label>
+    <label><input type="checkbox" id="rUnbilled"> Not billed for storage only</label>
+    <button id="btnPrintRack" class="printbtn">&#128424; Print rack list</button>
+  </div>
+  <div class="print-head print-only">
+    <img src="assets/logo.png" alt="">
+    <div>
+      <div class="t">TIREPlus Orleans — Tire Rack Inventory</div>
+      <div class="m" id="rPrintMeta"></div>
+    </div>
+  </div>
+  <div class="summary no-print" id="rSummary"></div>
+  <div class="list-wrap">
+    <table class="list">
+      <thead><tr>
+        <th>Slot</th><th>Customer</th><th>Plate</th><th>Vehicle</th>
+        <th>Tires on the rack</th><th>Rims</th><th>Last swap</th><th>Billing</th>
+      </tr></thead>
+      <tbody id="rBody"></tbody>
+    </table>
+    <div class="empty" id="rEmpty" hidden>No rack slots match.</div>
+  </div>
+</section>
+
 <!-- ============ INVOICE VIEW ============ -->
 <section id="invView" hidden>
   <div class="inv-toolbar no-print">
@@ -285,6 +330,7 @@
 <script src="data/items.js"></script>
 <script src="data/customers.js"></script>
 <script src="data/vehicles.js"></script>
+<script src="data/inventory.js"></script>
 <script>
 'use strict';
 
@@ -642,6 +688,27 @@ function renderInvoice(v){
   document.title = `${title} — Job ${v.job} — ${v.name||''}`;
 }
 
+/* ================= Physical rack inventory ================= */
+const INV_PACK = window.TP_INVENTORY || {countDate:'', scope:'', cols:[], rows:[]};
+const RACKS = materialize(INV_PACK);
+const RACK_OCCUPIED = RACKS.filter(r => r.name.toUpperCase() !== 'OPEN SPOT');
+const normName = s => String(s||'').toLowerCase().replace(/[^a-z]/g,'');
+const normPlate = s => String(s||'').toUpperCase().replace(/[^A-Z0-9]/g,'');
+// customer (normalised) -> slots physically holding their tires
+const slotsByCust = new Map();
+{
+  const plateOwner = new Map();          // plate -> normalised invoice name
+  for (const v of INVOICES) if (v.plate) plateOwner.set(normPlate(v.plate), normName(v.name));
+  const known = new Set(INVOICES.map(v=>normName(v.name)));
+  for (const r of RACK_OCCUPIED){
+    let k = normName(r.name);
+    if (!known.has(k) && r.plate && plateOwner.has(normPlate(r.plate))) k = plateOwner.get(normPlate(r.plate));
+    r._cust = k;
+    let a = slotsByCust.get(k); if (!a) slotsByCust.set(k, a=[]);
+    a.push(r);
+  }
+}
+
 /* ================= Tire storage history ================= */
 const SWAP_CODES = new Set(['SVC-TIRESNOR','SVC-TIRESOR','TIRE_NOR','TIRE_NOR_NC','TIRE_OR',
                             'TIRE_NOR19+','TIRE_OR19+','TIRE_TRUCK_NOR','TIRE_TRUCK_OR']);
@@ -712,10 +779,16 @@ function renderStorage(){
     const le = lastEvent.get(g.name);
     g.lastTrue = le.date;                       // true last activity incl. swaps
     g.months = monthsBetween(le.date, DATA_END);
-    g.status = le.out ? 'closed' : (g.months >= thresh ? 'aband' : 'active');
+    g.slots = slotsByCust.get(normName(g.name)) || [];
+    // the physical count is ground truth; inference only fills the gaps
+    if (g.slots.length)      g.status = 'onrack';
+    else if (RACK_OCCUPIED.length) g.status = le.out ? 'closed' : 'gone';
+    else                     g.status = le.out ? 'closed' : (g.months >= thresh ? 'aband' : 'active');
   }
-  const nAband = list.filter(g=>g.status==='aband').length;
-  if (abandOnly) list = list.filter(g=>g.status==='aband');
+  const nOnRack = list.filter(g=>g.status==='onrack').length;
+  const nGone   = list.filter(g=>g.status==='gone').length;
+  const nAband  = list.filter(g=>g.status==='aband').length;
+  if (abandOnly) list = list.filter(g=> g.status==='gone' || g.status==='aband');
   if (q) list = list.filter(g => (g.name + ' ' + [...g.plates].join(' ')).toLowerCase().includes(q));
   list.sort((a,b)=> abandOnly ? (a.lastTrue < b.lastTrue ? -1 : a.lastTrue > b.lastTrue ? 1 : 0)
                               : (a.lastTrue < b.lastTrue ? 1 : a.lastTrue > b.lastTrue ? -1 : 0));
@@ -725,7 +798,10 @@ function renderStorage(){
     `<span><b>${list.reduce((s,g)=>s+g.nStor,0)}</b> storage entries</span>`+
     `<span><b>${list.length}</b> customers</span>`+
     `<span>Storage billed: <b>${money(totStor)}</b></span>`+
-    `<span style="color:#a11212"><b>${nAband}</b> potentially abandoned</span>`+
+    (RACK_OCCUPIED.length
+      ? `<span style="color:#1c7a2d"><b>${nOnRack}</b> verified on the racks</span>`+
+        `<span style="color:#a11212"><b>${nGone}</b> gone, pickup not recorded</span>`
+      : `<span style="color:#a11212"><b>${nAband}</b> potentially abandoned</span>`)+
     `<span>Click a row to open the invoice.</span>`;
 
   let html = '';
@@ -735,9 +811,12 @@ function renderStorage(){
       const t = tyreFor(p, g.name);
       return esc(p) + (t ? ` <span style="color:#777;font-weight:normal">(${esc(t)})</span>` : '');
     }).join(', ');
-    const stChip = g.status==='aband' ? `<span class="st st-aband">Possibly abandoned &middot; ${g.months} mo</span>`
-                 : g.status==='closed' ? `<span class="st st-closed">Closed out</span>`
-                 : `<span class="st st-active">Active</span>`;
+    const stChip =
+        g.status==='onrack' ? `<span class="st st-onrack">On the rack &middot; ${esc(g.slots.map(s=>s.loc).join(', '))}</span>`
+      : g.status==='gone'   ? `<span class="st st-gone">Gone &mdash; pickup not recorded &middot; ${g.months} mo</span>`
+      : g.status==='aband'  ? `<span class="st st-aband">Possibly abandoned &middot; ${g.months} mo</span>`
+      : g.status==='closed' ? `<span class="st st-closed">Closed out</span>`
+      : `<span class="st st-active">Active</span>`;
     html += `<tr class="cust-hdr"><td colspan="8">${esc(g.name)} ${stChip}
       <span class="meta">${vehTxt}${vehTxt?' &middot; ':''}${g.nStor} storage charge${g.nStor===1?'':'s'}
       &middot; ${money(g.storTotal)} &middot; last activity ${fmtDate(g.lastTrue)}</span></td></tr>`;
@@ -755,11 +834,65 @@ function renderStorage(){
   $('#sEmpty').hidden = list.length > 0;
   $('#sPrintMeta').textContent =
     `${list.reduce((s,g)=>s+g.nStor,0)} storage entries · ${list.length} customers · storage billed ${money(totStor)}` +
-    ` · ${nAband} potentially abandoned (no activity for ${thresh}+ months as of ${fmtDate(DATA_END)})` +
+    (RACK_OCCUPIED.length
+      ? ` · verified against the ${INV_PACK.countDate} physical count: ${nOnRack} on the racks, ${nGone} gone with no pickup recorded`
+      : ` · ${nAband} potentially abandoned (no activity for ${thresh}+ months as of ${fmtDate(DATA_END)})`) +
     (abandOnly ? ' · showing potentially abandoned only' : '') +
     (withSwaps ? ' · tire-swap visits included' : '') +
     (q ? ` · filtered by "${q}"` : '') +
     ` · printed ${fmtDate(new Date().toISOString().slice(0,10))}`;
+}
+
+function renderRacks(){
+  const q = $('#rq').value.trim().toLowerCase();
+  const cont = $('#rCont').value;
+  const unbilledOnly = $('#rUnbilled').checked;
+  const billedCusts = new Set();
+  for (const r of rows_storage_customers()) billedCusts.add(r);
+
+  let list = RACKS.slice().sort((a,b)=> a.loc < b.loc ? -1 : a.loc > b.loc ? 1 : 0);
+  if (cont) list = list.filter(r => r.cont === cont);
+  list = list.map(r => {
+    const open = r.name.toUpperCase() === 'OPEN SPOT';
+    const billed = !open && billedCusts.has(r._cust);
+    return Object.assign({}, r, {open, billed});
+  });
+  if (unbilledOnly) list = list.filter(r => !r.open && !r.billed);
+  if (q) list = list.filter(r => [r.loc,r.name,r.plate,r.vehicle,r.tires,r.seasons,r.note]
+                                  .join(' ').toLowerCase().includes(q));
+
+  const occ = list.filter(r=>!r.open).length, free = list.filter(r=>r.open).length;
+  const nUnbilled = list.filter(r=>!r.open && !r.billed).length;
+  $('#rSummary').innerHTML =
+    `<span><b>${occ}</b> sets on the racks</span>`+
+    `<span><b>${free}</b> open spots</span>`+
+    `<span style="color:#a11212"><b>${nUnbilled}</b> not billed for storage</span>`+
+    `<span>Counted ${esc(INV_PACK.countDate)} &middot; ${esc(INV_PACK.scope)}</span>`;
+  $('#rPrintMeta').textContent =
+    `${occ} sets on the racks · ${free} open spots · ${nUnbilled} not billed for storage` +
+    (cont ? ` · container ${cont}` : '') + (unbilledOnly ? ' · unbilled only' : '') +
+    (q ? ` · filtered by "${q}"` : '') +
+    ` · counted ${INV_PACK.countDate} · printed ${fmtDate(new Date().toISOString().slice(0,10))}`;
+
+  $('#rBody').innerHTML = list.map(r => {
+    if (r.open) return `<tr class="rack-open"><td>${esc(r.loc)}</td><td colspan="7">— open spot —</td></tr>`;
+    const bill = r.billed ? `<span class="st st-active">Billed</span>`
+                          : `<span class="st st-aband">Not billed</span>`;
+    return `<tr${r._idxInv!=null?` data-idx="${r._idxInv}"`:''}>
+      <td>${esc(r.loc)}</td><td>${esc(r.name)}</td><td>${esc(r.plate)}</td>
+      <td>${esc(r.vehicle)}</td><td class="tires">${esc(r.tires)}${r.note?` <i>(${esc(r.note)})</i>`:''}</td>
+      <td>${esc(r.rims)}</td><td>${esc(r.lastSwap && r.lastSwap!=='?' ? fmtDate(r.lastSwap) : (r.lastSwap||''))}</td>
+      <td>${bill}</td></tr>`;
+  }).join('');
+  $('#rEmpty').hidden = list.length > 0;
+}
+// normalised names of every customer ever billed for storage
+let _storCusts = null;
+function rows_storage_customers(){
+  if (_storCusts) return _storCusts;
+  const {rows} = buildStorage();
+  _storCusts = new Set(rows.map(r => normName(r.v.name)));
+  return _storCusts;
 }
 
 /* ================= Routing / view switching ================= */
@@ -768,10 +901,12 @@ let returnHash = '';                 // where Back leads from the invoice view
 function setNav(which){
   $('#navInv').classList.toggle('active', which==='inv');
   $('#navStor').classList.toggle('active', which==='stor');
+  $('#navRack').classList.toggle('active', which==='rack');
 }
 function showList(){
   $('#invView').hidden = true;
   $('#storageView').hidden = true;
+  $('#rackView').hidden = true;
   $('#listView').hidden = false;
   returnHash = '';
   setNav('inv');
@@ -780,6 +915,7 @@ function showList(){
 function showStorage(){
   $('#invView').hidden = true;
   $('#listView').hidden = true;
+  $('#rackView').hidden = true;
   $('#storageView').hidden = false;
   returnHash = '#/storage';
   setNav('stor');
@@ -797,13 +933,25 @@ function showInvoice(idx){
   $('#navPos').textContent = pos>=0 ? `${pos+1} of ${filtered.length.toLocaleString()} in current list` : '';
   $('#listView').hidden = true;
   $('#storageView').hidden = true;
+  $('#rackView').hidden = true;
   $('#invView').hidden = false;
   window.scrollTo(0,0);
+}
+function showRacks(){
+  $('#invView').hidden = true;
+  $('#listView').hidden = true;
+  $('#storageView').hidden = true;
+  $('#rackView').hidden = false;
+  returnHash = '#/racks';
+  setNav('rack');
+  renderRacks();
+  document.title = 'TIREPlus Orleans — Tire Rack Inventory';
 }
 function route(){
   const m = /^#\/i\/(\d+)$/.exec(location.hash);
   if (m) showInvoice(+m[1]);
   else if (location.hash === '#/storage') showStorage();
+  else if (location.hash === '#/racks') showRacks();
   else showList();
 }
 window.addEventListener('hashchange', route);
@@ -865,13 +1013,18 @@ $('#sq').addEventListener('input', ()=>{ clearTimeout(sqTimer); sqTimer=setTimeo
 $('#sSwaps').addEventListener('change', renderStorage);
 function setPageOrientation(){
   // storage list prints landscape; invoices keep portrait A4
-  const landscape = !$('#storageView').hidden;
+  const landscape = !$('#storageView').hidden || !$('#rackView').hidden;
   document.getElementById('pageOrient').textContent = landscape ? '@page{size:A4 landscape}' : '';
 }
 window.addEventListener('beforeprint', setPageOrientation);
 $('#btnPrintStorage').addEventListener('click', ()=>{ setPageOrientation(); window.print(); });
 $('#sAband').addEventListener('change', renderStorage);
 $('#sThresh').addEventListener('change', renderStorage);
+let rqTimer;
+$('#rq').addEventListener('input', ()=>{ clearTimeout(rqTimer); rqTimer=setTimeout(renderRacks,150); });
+$('#rCont').addEventListener('change', renderRacks);
+$('#rUnbilled').addEventListener('change', renderRacks);
+$('#btnPrintRack').addEventListener('click', ()=>{ setPageOrientation(); window.print(); });
 $('#sBody').addEventListener('click', e=>{
   const tr = e.target.closest('tr[data-idx]'); if(!tr) return;
   location.hash = '#/i/'+tr.dataset.idx;
@@ -890,6 +1043,9 @@ if ('serviceWorker' in navigator && /^https?:$/.test(location.protocol)){
   navigator.serviceWorker.register('sw.js').catch(()=>{});
 }
 
+if (RACK_OCCUPIED.length){       // a physical count supersedes the age heuristic
+  $('#sThreshLbl').style.display = 'none';
+}
 applyFilters();
 route();
 </script>
