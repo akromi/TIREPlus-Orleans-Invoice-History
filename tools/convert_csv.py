@@ -16,7 +16,7 @@ csv.field_size_limit(10**9)
 INV_COLS = ["job","inv","type","status","date","name","plate","desc","total",
             "balance","gst","subtotal","discount","deposits","taxRate","state",
             "suburb","postcode","make","model","buildDate","bodyType","odometer",
-            "note","jobNote"]
+            "note","jobNote","wip"]
 ITEM_COLS = ["job","code","desc","qty","unitPrice","gst","amount","sub","ptype","ordering","bom","note"]
 CUST_COLS = ["name","phone","email","addr1","addr2","suburb","state","postcode","bal"]
 VEH_COLS  = ["plate","name","vin","next","tyre"]
@@ -61,6 +61,7 @@ def convert(inv_csv, item_csv, out_dir, cust_csv=None, veh_csv=None):
                 num(r["tax_rate"]), s(r["state"]), s(r["suburb"]), s(r["postcode"]),
                 s(r["make"]), s(r["model"]), s(r["build_date"]), s(r["body_type"]),
                 num(r["odometer"]), plain(r["note"]), plain(r["job_card_note"]),
+                1 if s(r["work_in_progress"]) == "true" else 0,
             ])
 
     item_rows = []

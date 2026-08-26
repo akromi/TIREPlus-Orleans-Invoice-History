@@ -67,7 +67,8 @@ balance is tiered by what the history actually shows:
 
 | Tier | Rule |
 |---|---|
-| **Quotes left as invoices** | no invoice number was ever issued — never invoiced, so not a receivable; revert the type to Quote (or void) in WSS |
+| **Revert to quote** | no invoice number, and no sign the work went ahead — set the type back to Quote in WSS |
+| **Possibly unbilled work** | no invoice number, but supplier parts were ordered against the job card or the job was flagged in progress — check before reverting; this may be work done and never billed |
 | **Chase** | a real numbered invoice, over a year old and ≥ $500 or under 2 years — printable as a **call list** with phone numbers |
 | **Write off** | a real invoice, over 2 years old and under $500 — bad debt |
 | **Current** | a real invoice under a year old — normal receivable |
