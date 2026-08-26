@@ -95,8 +95,12 @@
   #cleanView td.why{white-space:normal;max-width:340px;color:#555;font-size:14px}
   .tierbar{display:flex;gap:0;margin:0 18px 12px;border-radius:8px;overflow:hidden;font-size:14.5px}
   .tierbar div{padding:8px 14px;color:#fff;font-weight:bold}
-  .tierbar .t-revert{background:#5b4b9e}.tierbar .t-unbilled{background:#0f6f7a}
+  .tierbar{flex-wrap:wrap}
+  .tierbar .t-billable{background:#0f6f7a}.tierbar .t-live{background:#4a7f9e}
+  .tierbar .t-stale{background:#8a7f6d}.tierbar .t-revert{background:#5b4b9e}
   .tierbar .t-chase{background:#a11212}
+  .rep{display:inline-block;background:#ffd9d9;color:#a11212;border-radius:4px;padding:0 5px;
+       font-size:12px;font-weight:bold;margin-left:6px;-webkit-print-color-adjust:exact;print-color-adjust:exact}
   .tierbar .t-writeoff{background:#7a5c00}.tierbar .t-keep{background:#1c7a2d}
   .biz{display:inline-block;background:#e3ecff;color:#1d3fa0;border-radius:4px;padding:0 5px;font-size:12px;font-weight:bold}
   .progress{height:10px;background:#dfe3ee;border-radius:6px;overflow:hidden;margin:2px 0 0;min-width:180px}
@@ -397,8 +401,10 @@
     <label>Tier
       <select id="cTier">
         <option value="chase">Chase — call list</option>
+        <option value="billable">Pull job card — unbilled work</option>
+        <option value="live">In progress at export</option>
+        <option value="stale">Too old to bill</option>
         <option value="revert">Revert to quote</option>
-        <option value="unbilled">Possibly unbilled work</option>
         <option value="writeoff">Write off</option>
         <option value="keep">Current receivables</option>
         <option value="all">All with a balance</option>
@@ -923,9 +929,18 @@ function buildCleanup(){
       const moved = (realByVeh.get(normName(v.name)+'|'+normPlate(v.plate)) || [])
         .some(d => { const gap = (new Date(d) - new Date(v.date)) / 86400000; return gap >= 0 && gap <= 30; });
       if ((partsOrdered || v.wip) && !moved){
-        tier='unbilled';
-        why = (partsOrdered ? `supplier parts ordered (${v._refs.slice(0,2).join(', ')})` : 'job flagged in progress')
-            + `, never invoiced — check whether the work was done and never billed`;
+        const evidence = partsOrdered ? `parts ordered (${v._refs.slice(0,2).join(', ')})` : 'flagged in progress';
+        if (age <= 30){
+          tier='live';
+          why = `${age} day${age===1?'':'s'} before the data was exported — a job still in progress, not a mistake`;
+        } else if (age <= 365){
+          tier='billable';
+          why = `${evidence}, no invoice ${Math.round(age/30)} months on — pull the job card and bill it if the work was done`;
+        } else {
+          tier='stale';
+          why = `${evidence}, ${yrs} yr on — too old to bill` +
+                (later ? `, but the customer still comes in (${later} paid visits since)` : `, and the customer has not returned`);
+        }
       } else {
         tier='revert';
         why = moved ? `re-invoiced on another job card within 30 days — safe to revert`
@@ -944,6 +959,15 @@ function buildCleanup(){
     const business = /\b(inc|ltd|corp|group|maintenance|canada|services?|construction|transport|holdings|enterprises?|company|signs?|accounting)\b/i.test(v.name);
     return {v, acct, age, slots, later, tier, why, phone, business, key:String(v.job)};
   });
+  // customers appearing repeatedly in the never-invoiced groups: a process
+  // problem with specific accounts rather than isolated slips
+  const repeats = new Map();
+  for (const c of CLEANUP){
+    if (!['live','billable','stale'].includes(c.tier)) continue;
+    const k = normName(c.v.name);
+    repeats.set(k, (repeats.get(k)||0) + 1);
+  }
+  for (const c of CLEANUP) c.repeat = repeats.get(normName(c.v.name)) || 0;
   CLEANUP.sort((a,b)=> a.v.date < b.v.date ? -1 : a.v.date > b.v.date ? 1 : 0);
   return CLEANUP;
 }
@@ -1194,7 +1218,7 @@ function renderCleanup(){
   if (hideDone) list = list.filter(c => !closedOff.has(c.key));
   if (tier !== 'all') list.sort((a,b)=> b.v.balance - a.v.balance);
 
-  const TIERS = ['revert','unbilled','chase','writeoff','keep'];
+  const TIERS = ['billable','live','stale','revert','chase','writeoff','keep'];
   const counts = {}, sums = {};
   for (const t of TIERS){ counts[t]=0; sums[t]=0; }
   for (const c of all){ counts[c.tier]++; sums[c.tier] = r2(sums[c.tier] + c.v.balance); }
@@ -1214,10 +1238,16 @@ function renderCleanup(){
            `ahead — either no parts were ordered, or the job was re-invoiced on another card within a month. `+
            `${money(sums.revert)} of apparent debt disappears with a type change in Workshop Software. Nothing `+
            `for the books to correct: no revenue was ever recognised.`,
-    unbilled: `<b>Do not revert these yet.</b> Supplier parts were ordered against the job card (WP#, PS#, DT#…) `+
-           `or the job was flagged in progress, and no invoice ever followed. That points the other way — work `+
-           `you may have done and never billed, ${money(sums.unbilled)} of it. Check each against the job card `+
-           `before deciding: invoice it, or revert it if the job was abandoned.`,
+    billable: `<b>Pull these job cards.</b> Parts were ordered or the job was started, no invoice ever followed, `+
+           `and it is recent enough that the work can still be reconstructed and billed — ${money(sums.billable)} `+
+           `across ${counts.billable} jobs. Timing belts and ball joints do not get quoted and forgotten. `+
+           `A red marker means that customer appears repeatedly here, which is a process problem, not a slip.`,
+    live: `<b>No action needed.</b> These were within 30 days of the ${fmtDate(DATA_END)} export — jobs that were `+
+           `simply still open on the day the data was taken, including parts on order. They are not recording `+
+           `failures and will have been invoiced as they finished.`,
+    stale: `<b>Too old to bill.</b> Parts ordered or job started over a year ago with no invoice. Realistically `+
+           `unrecoverable: raising an invoice now would damage the relationship more than it collects. Where the `+
+           `customer still comes in, raise it casually on their next visit; otherwise revert these with the rest.`,
     chase: `<b>Real unpaid invoices.</b> Every one carries an invoice number, so the work was invoiced and the `+
            `money is genuinely outstanding. Ring these — print the list to work from.`,
     writeoff: `<b>Bad-debt candidates.</b> Real invoices, over two years old and under $500 each. Too small and `+
@@ -1234,12 +1264,15 @@ function renderCleanup(){
   $('#cPrintTitle').textContent =
       tier === 'chase' ? 'TIREPlus Orleans — Outstanding Balance Call List'
     : tier === 'revert' ? 'TIREPlus Orleans — Revert to Quote (Workshop Software worklist)'
-    : tier === 'unbilled' ? 'TIREPlus Orleans — Possibly Unbilled Work (check before reverting)'
+    : tier === 'billable' ? 'TIREPlus Orleans — Job Card Pull List (unbilled work)'
+    : tier === 'live' ? 'TIREPlus Orleans — Jobs In Progress at Export'
+    : tier === 'stale' ? 'TIREPlus Orleans — Unbilled Work Too Old to Bill'
     : 'TIREPlus Orleans — Stale Invoice Cleanup Worklist';
   $('#cPrintMeta').textContent =
     `${list.length} invoices · ${money(list.reduce((s,c)=>s+c.v.balance,0))} · tier: ` +
-    ({revert:'revert to quote', unbilled:'possibly unbilled work', chase:'chase — call list',
-      writeoff:'write off', keep:'current receivables', all:'all with a balance'})[tier] +
+    ({billable:'pull job card — unbilled work', live:'in progress at export', stale:'too old to bill',
+      revert:'revert to quote', chase:'chase — call list', writeoff:'write off',
+      keep:'current receivables', all:'all with a balance'})[tier] +
     (q ? ` · filtered by "${q}"` : '') +
     ` · data to ${fmtDate(DATA_END)} · printed ${fmtDate(new Date().toISOString().slice(0,10))}`;
 
@@ -1247,7 +1280,7 @@ function renderCleanup(){
       <td class="tick"><input type="checkbox" ${closedOff.has(c.key)?'checked':''}></td>
       <td>${fmtDate(c.v.date)}</td><td>${esc(c.v.job)}</td>
       <td>${c.v.inv==null||c.v.inv===''?'<i style="color:#a11212">none</i>':esc(c.v.inv)}</td>
-      <td>${esc(c.v.name)}${c.business?' <span class="biz">business</span>':''}</td>
+      <td>${esc(c.v.name)}${c.business?' <span class="biz">business</span>':''}${c.repeat>=3?` <span class="rep">${c.repeat}\u00d7</span>`:''}</td>
       <td>${esc(c.phone)}</td><td class="why">${esc(c.v.desc||'')}</td>
       <td class="r">${money(c.v.balance)}</td>
       <td>${(c.age/365).toFixed(1)} yr</td><td class="why">${esc(c.why)}</td>
@@ -1255,8 +1288,8 @@ function renderCleanup(){
   $('#cEmpty').hidden = list.length > 0;
 
   const bar = $('#cTierBar');
-  const LBL = {revert:'Revert to quote', unbilled:'Possibly unbilled work',
-               chase:'Chase', writeoff:'Write off', keep:'Current'};
+  const LBL = {billable:'Pull job card', live:'In progress', stale:'Too old to bill',
+               revert:'Revert to quote', chase:'Chase', writeoff:'Write off', keep:'Current'};
   if (bar) bar.innerHTML = TIERS.map(t =>
     `<div class="t-${t}">${LBL[t]}: ${counts[t]} · ${money(sums[t])}</div>`).join('');
 }
@@ -1465,12 +1498,12 @@ $('#cBody').addEventListener('click', e=>{
 });
 $('#btnExportClean').addEventListener('click', ()=>{
   const cell = x => '"' + String(x==null?'':x).replace(/"/g,'""') + '"';
-  const head = ['Done','Date','Job #','Invoice #','Customer','Business','Phone','Job','Balance','Age (years)','Tier','Why'];
+  const head = ['Done','Date','Job #','Invoice #','Customer','Business','Repeat count','Phone','Job','Balance','Age (years)','Tier','Why'];
   const lines = [head.map(cell).join(',')];
   for (const tr of $('#cBody').querySelectorAll('tr[data-key]')){
     const c = buildCleanup().find(x=>x.key===tr.dataset.key);
     lines.push([closedOff.has(c.key)?'yes':'', fmtDate(c.v.date), c.v.job, c.v.inv==null?'':c.v.inv,
-      c.v.name, c.business?'yes':'', c.phone, c.v.desc||'', c.v.balance.toFixed(2),
+      c.v.name, c.business?'yes':'', c.repeat||'', c.phone, c.v.desc||'', c.v.balance.toFixed(2),
       (c.age/365).toFixed(1), c.tier, c.why].map(cell).join(','));
   }
   const blob = new Blob(['\ufeff'+lines.join('\r\n')], {type:'text/csv;charset=utf-8'});

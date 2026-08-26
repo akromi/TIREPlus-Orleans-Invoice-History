@@ -68,7 +68,9 @@ balance is tiered by what the history actually shows:
 | Tier | Rule |
 |---|---|
 | **Revert to quote** | no invoice number, and no sign the work went ahead — set the type back to Quote in WSS |
-| **Possibly unbilled work** | no invoice number, but supplier parts were ordered against the job card or the job was flagged in progress — check before reverting; this may be work done and never billed |
+| **Pull job card** | parts ordered / job started, no invoice, 1–12 months old — recent enough to reconstruct and bill; prints as a **job card pull list** |
+| **In progress** | within 30 days of the export — simply open on the day the data was taken, no action |
+| **Too old to bill** | parts ordered / job started over a year ago — unrecoverable; revert, or raise casually if the customer still visits |
 | **Chase** | a real numbered invoice, over a year old and ≥ $500 or under 2 years — printable as a **call list** with phone numbers |
 | **Write off** | a real invoice, over 2 years old and under $500 — bad debt |
 | **Current** | a real invoice under a year old — normal receivable |
