@@ -88,6 +88,17 @@
   .owe.soft{background:#f0e6e6;color:#7a5555}
   #balView td.amt-strong{font-weight:bold;color:#a11212}
   #balView td.amt-soft{color:#888}
+  #cleanView td.tick,#cleanView th.tick{text-align:center;width:58px}
+  #cleanView td.tick input{width:19px;height:19px;cursor:pointer}
+  #cleanView tr.done td{opacity:.45;text-decoration:line-through}
+  #cleanView tr.done td.tick{opacity:1;text-decoration:none}
+  #cleanView td.why{white-space:normal;max-width:340px;color:#555;font-size:14px}
+  .tierbar{display:flex;gap:0;margin:0 18px 12px;border-radius:8px;overflow:hidden;font-size:14.5px}
+  .tierbar div{padding:8px 14px;color:#fff;font-weight:bold}
+  .tierbar .t-close{background:#1c7a2d}.tierbar .t-review{background:#b8860b}.tierbar .t-keep{background:#555}
+  .progress{height:10px;background:#dfe3ee;border-radius:6px;overflow:hidden;margin:2px 0 0;min-width:180px}
+  .progress i{display:block;height:100%;background:#1c7a2d}
+  @media print{ #cleanView td.tick{border:0.5pt solid #000;width:34pt;height:16pt} }
 
   /* ---------- Invoice view chrome ---------- */
   .inv-toolbar{display:flex;gap:8px;align-items:center;padding:10px 18px;background:#fff;border-bottom:1px solid var(--line);position:sticky;top:0;z-index:5}
@@ -202,6 +213,16 @@
       border-bottom:1.5pt solid #000;font-size:9pt;padding:4pt 5pt}
     #balView table.list td{padding:3pt 5pt;white-space:normal;max-width:none;border-bottom:0.5pt solid #aaa}
     #balView table.list tr{page-break-inside:avoid}
+    #cleanView{padding:8mm 8mm 10mm}
+    #cleanView .list-wrap{overflow:visible;padding:0}
+    #cleanView table.list{box-shadow:none;font-size:9pt}
+    #cleanView table.list thead{display:table-header-group}
+    #cleanView table.list th{position:static;background:#fff !important;color:#000;
+      border-bottom:1.5pt solid #000;font-size:9pt;padding:4pt 5pt}
+    #cleanView table.list td{padding:3pt 5pt;white-space:normal;max-width:none;border-bottom:0.5pt solid #aaa}
+    #cleanView table.list tr{page-break-inside:avoid}
+    #cleanView tr.done td{opacity:1;text-decoration:none}
+    #cleanView td.tick input{display:none}
   }
   @media (max-width:840px){ .sheet{transform-origin:top left;} }
 </style>
@@ -217,6 +238,7 @@
     <a href="#/storage" id="navStor">Tire Storage</a>
     <a href="#/racks" id="navRack">Rack Inventory</a>
     <a href="#/balances" id="navBal">Balances</a>
+    <a href="#/cleanup" id="navClean">Invoice Cleanup</a>
   </nav>
   <div class="sub" id="headerStats"></div>
 </header>
@@ -362,6 +384,45 @@
       <tbody id="bBody"></tbody>
     </table>
     <div class="empty" id="bEmpty" hidden>No customers match.</div>
+  </div>
+</section>
+
+<!-- ============ INVOICE CLEANUP VIEW ============ -->
+<section id="cleanView" hidden>
+  <div class="toolbar no-print">
+    <input type="search" id="cq" placeholder="Search by customer, job # or invoice #…">
+    <label>Tier
+      <select id="cTier">
+        <option value="close">Safe to close</option>
+        <option value="review">Review first</option>
+        <option value="keep">Keep open</option>
+        <option value="all">All with a balance</option>
+      </select>
+    </label>
+    <label><input type="checkbox" id="cHideDone"> Hide ticked off</label>
+    <button id="btnPrintClean" class="printbtn">&#128424; Print worklist</button>
+    <button id="btnExportClean">Export CSV</button>
+    <button id="btnResetClean" title="Clear every tick on this computer">Reset ticks</button>
+  </div>
+  <div class="print-head print-only">
+    <img src="assets/logo.png" alt="">
+    <div>
+      <div class="t">TIREPlus Orleans — Stale Invoice Cleanup Worklist</div>
+      <div class="m" id="cPrintMeta"></div>
+    </div>
+  </div>
+  <div class="tierbar no-print" id="cTierBar"></div>
+  <div class="summary no-print" id="cSummary"></div>
+  <div class="note-box no-print" id="cNote"></div>
+  <div class="list-wrap">
+    <table class="list">
+      <thead><tr>
+        <th class="tick">Done</th><th>Date</th><th>Job #</th><th>Invoice #</th>
+        <th>Customer</th><th class="r">Balance</th><th>Age</th><th>Why</th>
+      </tr></thead>
+      <tbody id="cBody"></tbody>
+    </table>
+    <div class="empty" id="cEmpty" hidden>Nothing in this tier.</div>
   </div>
 </section>
 
@@ -807,6 +868,48 @@ const owesByCust = () => { const m=new Map(); for (const g of buildBalances()) m
 let _owes = null;
 const owesFor = k => (_owes || (_owes = owesByCust())).get(k);
 
+/* ================= Stale open-invoice cleanup =================
+   Tiers every invoice that still carries a balance so the stale ones can be
+   closed off in Workshop Software safely. This app never writes to WSS - it
+   produces the worklist and remembers what has been ticked off. */
+const CLEAN_KEY = 'tpClosedOff';
+let closedOff = new Set();
+try { closedOff = new Set(JSON.parse(localStorage.getItem(CLEAN_KEY) || '[]')); } catch(e){}
+function saveClosedOff(){
+  try { localStorage.setItem(CLEAN_KEY, JSON.stringify([...closedOff])); } catch(e){}
+}
+let CLEANUP = null;
+function buildCleanup(){
+  if (CLEANUP) return CLEANUP;
+  const laterClosed = new Map();       // customer -> dates of later closed invoices
+  for (const v of INVOICES){
+    if (v.status !== 'C') continue;
+    const k = normName(v.name);
+    let a = laterClosed.get(k); if (!a) laterClosed.set(k, a=[]);
+    a.push(v.date);
+  }
+  CLEANUP = INVOICES.filter(v => v.balance > 0.004).map(v => {
+    const k = normName(v.name);
+    const acct = r2(acctBalByCust.get(k) || 0);
+    const age = daysAgo(v.date);
+    const slots = slotsByCust.get(k) || [];
+    const later = (laterClosed.get(k) || []).filter(d => d > v.date).length;
+    let tier, why;
+    if (Math.abs(acct) > 0.004){ tier = 'keep'; why = `account balance ${money(acct)} still on record`; }
+    else if (age <= 365)       { tier = 'keep'; why = `only ${age} days old — may be genuinely unpaid`; }
+    else if (v.balance >= 500) { tier = 'review'; why = `${money(v.balance)} is large — confirm before closing`; }
+    else if (slots.length)     { tier = 'review'; why = `tires on the racks (${slots.map(s=>s.loc).join(', ')})`; }
+    else {
+      tier = 'close';
+      why = `$0 account balance, ${(age/365).toFixed(1)} yr old` +
+            (later ? `, ${later} later paid visit${later===1?'':'s'}` : ', no return visits');
+    }
+    return {v, acct, age, slots, later, tier, why, key:String(v.job)};
+  });
+  CLEANUP.sort((a,b)=> a.v.date < b.v.date ? -1 : a.v.date > b.v.date ? 1 : 0);
+  return CLEANUP;
+}
+
 /* ================= Tire storage history ================= */
 const SWAP_CODES = new Set(['SVC-TIRESNOR','SVC-TIRESOR','TIRE_NOR','TIRE_NOR_NC','TIRE_OR',
                             'TIRE_NOR19+','TIRE_OR19+','TIRE_TRUCK_NOR','TIRE_TRUCK_OR']);
@@ -1042,6 +1145,56 @@ function renderBalances(){
   $('#bEmpty').hidden = list.length > 0;
 }
 
+function renderCleanup(){
+  const all = buildCleanup();
+  const q = $('#cq').value.trim().toLowerCase();
+  const tier = $('#cTier').value;
+  const hideDone = $('#cHideDone').checked;
+
+  let list = tier === 'all' ? all.slice() : all.filter(c => c.tier === tier);
+  if (q) list = list.filter(c => (c.v.name+' '+c.v.job+' '+(c.v.inv||'')).toLowerCase().includes(q));
+  if (hideDone) list = list.filter(c => !closedOff.has(c.key));
+
+  const counts = {close:0, review:0, keep:0}, sums = {close:0, review:0, keep:0};
+  for (const c of all){ counts[c.tier]++; sums[c.tier] = r2(sums[c.tier] + c.v.balance); }
+  const tierList = tier==='all' ? all : all.filter(c=>c.tier===tier);
+  const done = tierList.filter(c=>closedOff.has(c.key)).length;
+  const pct = tierList.length ? Math.round(done/tierList.length*100) : 0;
+
+  $('#cSummary').innerHTML =
+    `<span><b>${list.length}</b> shown</span>`+
+    `<span>Value: <b>${money(list.reduce((s,c)=>s+c.v.balance,0))}</b></span>`+
+    `<span><b>${done}</b> of ${tierList.length} ticked off (${pct}%)`+
+    `<span class="progress"><i style="width:${pct}%"></i></span></span>`+
+    `<span>Tick each one after closing it in Workshop Software.</span>`;
+
+  $('#cNote').innerHTML =
+    `<b>This is a worklist, not an action.</b> The app cannot change anything in Workshop Software — `+
+    `close each invoice there, then tick it here to keep your place (ticks are stored in this browser only). `+
+    `Closing these writes off ${money(sums.close)} of invoices that were almost certainly paid, so have your `+
+    `bookkeeper agree the treatment first — the HST on them was likely already remitted.`;
+
+  $('#cPrintMeta').textContent =
+    `${list.length} invoices · ${money(list.reduce((s,c)=>s+c.v.balance,0))} · tier: ` +
+    ({close:'safe to close', review:'review first', keep:'keep open', all:'all with a balance'})[tier] +
+    (q ? ` · filtered by "${q}"` : '') +
+    ` · data to ${fmtDate(DATA_END)} · printed ${fmtDate(new Date().toISOString().slice(0,10))}`;
+
+  $('#cBody').innerHTML = list.map(c => `<tr class="${closedOff.has(c.key)?'done':''}" data-key="${esc(c.key)}" data-idx="${c.v._idx}">
+      <td class="tick"><input type="checkbox" ${closedOff.has(c.key)?'checked':''}></td>
+      <td>${fmtDate(c.v.date)}</td><td>${esc(c.v.job)}</td><td>${esc(c.v.inv==null?'':c.v.inv)}</td>
+      <td>${esc(c.v.name)}</td><td class="r">${money(c.v.balance)}</td>
+      <td>${(c.age/365).toFixed(1)} yr</td><td class="why">${esc(c.why)}</td>
+    </tr>`).join('');
+  $('#cEmpty').hidden = list.length > 0;
+
+  const bar = $('#cTierBar');
+  if (bar) bar.innerHTML =
+    `<div class="t-close">Safe to close: ${counts.close} · ${money(sums.close)}</div>`+
+    `<div class="t-review">Review first: ${counts.review} · ${money(sums.review)}</div>`+
+    `<div class="t-keep">Keep open: ${counts.keep} · ${money(sums.keep)}</div>`;
+}
+
 /* ================= Routing / view switching ================= */
 let currentIdx = null;
 let returnHash = '';                 // where Back leads from the invoice view
@@ -1050,8 +1203,10 @@ function setNav(which){
   $('#navStor').classList.toggle('active', which==='stor');
   $('#navRack').classList.toggle('active', which==='rack');
   $('#navBal').classList.toggle('active', which==='bal');
+  $('#navClean').classList.toggle('active', which==='clean');
 }
 function showList(){
+  $('#cleanView').hidden = true;
   $('#balView').hidden = true;
   $('#invView').hidden = true;
   $('#storageView').hidden = true;
@@ -1062,6 +1217,7 @@ function showList(){
   document.title = 'TIREPlus Orleans — Invoice History';
 }
 function showStorage(){
+  $('#cleanView').hidden = true;
   $('#balView').hidden = true;
   $('#invView').hidden = true;
   $('#listView').hidden = true;
@@ -1085,10 +1241,12 @@ function showInvoice(idx){
   $('#storageView').hidden = true;
   $('#rackView').hidden = true;
   $('#balView').hidden = true;
+  $('#cleanView').hidden = true;
   $('#invView').hidden = false;
   window.scrollTo(0,0);
 }
 function showRacks(){
+  $('#cleanView').hidden = true;
   $('#balView').hidden = true;
   $('#invView').hidden = true;
   $('#listView').hidden = true;
@@ -1100,6 +1258,7 @@ function showRacks(){
   document.title = 'TIREPlus Orleans — Tire Rack Inventory';
 }
 function showBalances(){
+  $('#cleanView').hidden = true;
   $('#invView').hidden = true;
   $('#listView').hidden = true;
   $('#storageView').hidden = true;
@@ -1110,12 +1269,25 @@ function showBalances(){
   renderBalances();
   document.title = 'TIREPlus Orleans — Outstanding Balances';
 }
+function showCleanup(){
+  $('#invView').hidden = true;
+  $('#listView').hidden = true;
+  $('#storageView').hidden = true;
+  $('#rackView').hidden = true;
+  $('#balView').hidden = true;
+  $('#cleanView').hidden = false;
+  returnHash = '#/cleanup';
+  setNav('clean');
+  renderCleanup();
+  document.title = 'TIREPlus Orleans — Stale Invoice Cleanup';
+}
 function route(){
   const m = /^#\/i\/(\d+)$/.exec(location.hash);
   if (m) showInvoice(+m[1]);
   else if (location.hash === '#/storage') showStorage();
   else if (location.hash === '#/racks') showRacks();
   else if (location.hash === '#/balances') showBalances();
+  else if (location.hash === '#/cleanup') showCleanup();
   else showList();
 }
 window.addEventListener('hashchange', route);
@@ -1177,7 +1349,8 @@ $('#sq').addEventListener('input', ()=>{ clearTimeout(sqTimer); sqTimer=setTimeo
 $('#sSwaps').addEventListener('change', renderStorage);
 function setPageOrientation(){
   // storage list prints landscape; invoices keep portrait A4
-  const landscape = !$('#storageView').hidden || !$('#rackView').hidden || !$('#balView').hidden;
+  const landscape = !$('#storageView').hidden || !$('#rackView').hidden
+                 || !$('#balView').hidden || !$('#cleanView').hidden;
   document.getElementById('pageOrient').textContent = landscape ? '@page{size:A4 landscape}' : '';
 }
 window.addEventListener('beforeprint', setPageOrientation);
@@ -1202,6 +1375,42 @@ $('#bBody').addEventListener('click', e=>{
   $('#fType').value=''; $('#fStatus').value=''; $('#fRefs').value=''; $('#fFrom').value=''; $('#fTo').value='';
   applyFilters();
   location.hash = '';
+});
+let cqTimer;
+$('#cq').addEventListener('input', ()=>{ clearTimeout(cqTimer); cqTimer=setTimeout(renderCleanup,150); });
+$('#cTier').addEventListener('change', renderCleanup);
+$('#cHideDone').addEventListener('change', renderCleanup);
+$('#btnPrintClean').addEventListener('click', ()=>{ setPageOrientation(); window.print(); });
+$('#btnResetClean').addEventListener('click', ()=>{
+  if (!closedOff.size) return;
+  if (confirm(`Clear all ${closedOff.size} ticks on this computer?`)){ closedOff.clear(); saveClosedOff(); renderCleanup(); }
+});
+$('#cBody').addEventListener('click', e=>{
+  const tr = e.target.closest('tr[data-key]'); if(!tr) return;
+  if (e.target.matches('input[type=checkbox]')){
+    const k = tr.dataset.key;
+    if (e.target.checked) closedOff.add(k); else closedOff.delete(k);
+    saveClosedOff();
+    tr.classList.toggle('done', e.target.checked);
+    renderCleanup();
+    return;
+  }
+  location.hash = '#/i/'+tr.dataset.idx;      // open the invoice itself
+});
+$('#btnExportClean').addEventListener('click', ()=>{
+  const cell = x => '"' + String(x==null?'':x).replace(/"/g,'""') + '"';
+  const head = ['Closed off','Date','Job #','Invoice #','Customer','Balance','Age (years)','Tier','Why'];
+  const lines = [head.map(cell).join(',')];
+  for (const tr of $('#cBody').querySelectorAll('tr[data-key]')){
+    const c = buildCleanup().find(x=>x.key===tr.dataset.key);
+    lines.push([closedOff.has(c.key)?'yes':'', fmtDate(c.v.date), c.v.job, c.v.inv==null?'':c.v.inv,
+      c.v.name, c.v.balance.toFixed(2), (c.age/365).toFixed(1), c.tier, c.why].map(cell).join(','));
+  }
+  const blob = new Blob(['\ufeff'+lines.join('\r\n')], {type:'text/csv;charset=utf-8'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'TIREPlus_invoice_cleanup_' + new Date().toISOString().slice(0,10).replace(/-/g,'') + '.csv';
+  a.click(); setTimeout(()=>URL.revokeObjectURL(a.href), 5000);
 });
 $('#btnExportBal').addEventListener('click', ()=>{
   const cell = x => '"' + String(x==null?'':x).replace(/"/g,'""') + '"';

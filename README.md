@@ -61,6 +61,15 @@ Customers are joined to invoices by display name and vehicles by plate, which
 fills in the phone, address, VIN and next-service fields on the printed
 invoice, and makes phone numbers, emails and VINs searchable.
 
+**Invoice Cleanup** (header tab) turns the stale open invoices into a
+worklist for closing them off in Workshop Software. Every invoice carrying a
+balance is tiered: **Safe to close** ($0 account balance, over a year old,
+under $500, no tires on the racks), **Review first** (large amounts or
+customers whose tires you hold) and **Keep open** (a real account balance, or
+under a year old). Each row explains its reasoning, ticks off as you close it
+in WSS (ticks persist in that browser), and the list prints landscape with
+tick boxes or exports to CSV. The app never writes to Workshop Software.
+
 **Balances** (header tab) flags customers who still owe money, showing two
 figures side by side: the **account balance** Workshop Software keeps on the
 customer record (what is really owed, updated as payments are applied) and the

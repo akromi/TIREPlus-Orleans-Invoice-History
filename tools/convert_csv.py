@@ -88,6 +88,11 @@ def convert(inv_csv, item_csv, out_dir, cust_csv=None, veh_csv=None):
             score = sum(1 for x in row[1:] if x)
             if name not in best or score > best[name][0]:
                 best[name] = (score, row)
+            # a duplicated customer keeps the largest balance on record, so
+            # receivables are never understated by picking the wrong row
+            kept = best[name][1]
+            if abs(row[-1] or 0) > abs(kept[-1] or 0):
+                kept[-1] = row[-1]
         cust_rows = [row for _, row in best.values()]
 
     veh_rows = []
