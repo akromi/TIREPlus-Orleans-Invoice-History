@@ -95,7 +95,10 @@
   #cleanView td.why{white-space:normal;max-width:340px;color:#555;font-size:14px}
   .tierbar{display:flex;gap:0;margin:0 18px 12px;border-radius:8px;overflow:hidden;font-size:14.5px}
   .tierbar div{padding:8px 14px;color:#fff;font-weight:bold}
-  .tierbar .t-close{background:#1c7a2d}.tierbar .t-review{background:#b8860b}.tierbar .t-keep{background:#555}
+  .tierbar .t-close{background:#1c7a2d}.tierbar .t-chase{background:#a11212}
+  .tierbar .t-writeoff{background:#7a5c00}.tierbar .t-review{background:#b8860b}
+  .tierbar .t-keep{background:#555}
+  .biz{display:inline-block;background:#e3ecff;color:#1d3fa0;border-radius:4px;padding:0 5px;font-size:12px;font-weight:bold}
   .progress{height:10px;background:#dfe3ee;border-radius:6px;overflow:hidden;margin:2px 0 0;min-width:180px}
   .progress i{display:block;height:100%;background:#1c7a2d}
   @media print{ #cleanView td.tick{border:0.5pt solid #000;width:34pt;height:16pt} }
@@ -394,7 +397,9 @@
     <label>Tier
       <select id="cTier">
         <option value="close">Safe to close</option>
-        <option value="review">Review first</option>
+        <option value="chase">Chase — call list</option>
+        <option value="writeoff">Write off</option>
+        <option value="review">Spot-check</option>
         <option value="keep">Keep open</option>
         <option value="all">All with a balance</option>
       </select>
@@ -407,7 +412,7 @@
   <div class="print-head print-only">
     <img src="assets/logo.png" alt="">
     <div>
-      <div class="t">TIREPlus Orleans — Stale Invoice Cleanup Worklist</div>
+      <div class="t" id="cPrintTitle">TIREPlus Orleans — Stale Invoice Cleanup Worklist</div>
       <div class="m" id="cPrintMeta"></div>
     </div>
   </div>
@@ -417,8 +422,9 @@
   <div class="list-wrap">
     <table class="list">
       <thead><tr>
-        <th class="tick">Done</th><th>Date</th><th>Job #</th><th>Invoice #</th>
-        <th>Customer</th><th class="r">Balance</th><th>Age</th><th>Why</th>
+        <th class="tick">Done</th><th>Date</th><th>Job #</th>
+        <th>Customer</th><th>Phone</th><th>Job</th>
+        <th class="r">Balance</th><th>Age</th><th>Why</th>
       </tr></thead>
       <tbody id="cBody"></tbody>
     </table>
@@ -894,17 +900,30 @@ function buildCleanup(){
     const age = daysAgo(v.date);
     const slots = slotsByCust.get(k) || [];
     const later = (laterClosed.get(k) || []).filter(d => d > v.date).length;
+    const yrs = (age/365).toFixed(1);
     let tier, why;
-    if (Math.abs(acct) > 0.004){ tier = 'keep'; why = `account balance ${money(acct)} still on record`; }
-    else if (age <= 365)       { tier = 'keep'; why = `only ${age} days old — may be genuinely unpaid`; }
-    else if (v.balance >= 500) { tier = 'review'; why = `${money(v.balance)} is large — confirm before closing`; }
-    else if (slots.length)     { tier = 'review'; why = `tires on the racks (${slots.map(s=>s.loc).join(', ')})`; }
-    else {
-      tier = 'close';
-      why = `$0 account balance, ${(age/365).toFixed(1)} yr old` +
-            (later ? `, ${later} later paid visit${later===1?'':'s'}` : ', no return visits');
+    if (Math.abs(acct) > 0.004){ tier='keep'; why = `account balance ${money(acct)} still on record`; }
+    else if (age <= 365)       { tier='keep'; why = `only ${age} days old — may be genuinely unpaid`; }
+    else if (later >= 3){        // came back and paid repeatedly: it was settled
+      tier='close';
+      why = `${later} later paid visits since` + (slots.length ? `, tires still on the racks (${slots.map(s=>s.loc).join(', ')})` : '') + `, ${yrs} yr old`;
     }
-    return {v, acct, age, slots, later, tier, why, key:String(v.job)};
+    else if (v.balance < 500 && !slots.length){
+      tier='close';
+      why = `$0 account balance, ${yrs} yr old` + (later ? `, ${later} later paid visit${later===1?'':'s'}` : ', no return visits');
+    }
+    else if (later === 0){
+      const big = v.balance >= 2000, recent = age <= 730;
+      tier = (big || recent) ? 'chase' : 'writeoff';
+      why = tier === 'chase'
+        ? `never returned — ${big ? money(v.balance)+' is large' : yrs+' yr old, still recent'}`
+        : `never returned, ${yrs} yr old and under $2,000 — write-off candidate`;
+    }
+    else { tier='review'; why = `only ${later} later paid visit${later===1?'':'s'} — spot-check before closing`; }
+    const c = custByName.get(v.name);
+    const phone = c && c.phone ? fmtPhone(c.phone) : '';
+    const business = /\b(inc|ltd|corp|group|maintenance|canada|services?|construction|transport|holdings|enterprises?|company|signs?|accounting)\b/i.test(v.name);
+    return {v, acct, age, slots, later, tier, why, phone, business, key:String(v.job)};
   });
   CLEANUP.sort((a,b)=> a.v.date < b.v.date ? -1 : a.v.date > b.v.date ? 1 : 0);
   return CLEANUP;
@@ -1154,8 +1173,11 @@ function renderCleanup(){
   let list = tier === 'all' ? all.slice() : all.filter(c => c.tier === tier);
   if (q) list = list.filter(c => (c.v.name+' '+c.v.job+' '+(c.v.inv||'')).toLowerCase().includes(q));
   if (hideDone) list = list.filter(c => !closedOff.has(c.key));
+  if (tier === 'chase' || tier === 'writeoff') list.sort((a,b)=> b.v.balance - a.v.balance);
 
-  const counts = {close:0, review:0, keep:0}, sums = {close:0, review:0, keep:0};
+  const TIERS = ['close','chase','writeoff','review','keep'];
+  const counts = {}, sums = {};
+  for (const t of TIERS){ counts[t]=0; sums[t]=0; }
   for (const c of all){ counts[c.tier]++; sums[c.tier] = r2(sums[c.tier] + c.v.balance); }
   const tierList = tier==='all' ? all : all.filter(c=>c.tier===tier);
   const done = tierList.filter(c=>closedOff.has(c.key)).length;
@@ -1168,31 +1190,50 @@ function renderCleanup(){
     `<span class="progress"><i style="width:${pct}%"></i></span></span>`+
     `<span>Tick each one after closing it in Workshop Software.</span>`;
 
-  $('#cNote').innerHTML =
-    `<b>This is a worklist, not an action.</b> The app cannot change anything in Workshop Software — `+
-    `close each invoice there, then tick it here to keep your place (ticks are stored in this browser only). `+
-    `Closing these writes off ${money(sums.close)} of invoices that were almost certainly paid, so have your `+
-    `bookkeeper agree the treatment first — the HST on them was likely already remitted.`;
+  const NOTES = {
+    close: `<b>Safe to close.</b> Either tiny and stale, or the customer came back and paid at least three more `+
+           `times afterwards — nobody lets a customer return 15 times with money owing. Close these in Workshop `+
+           `Software and tick them here. ${money(sums.close)} in total, so have your bookkeeper agree the `+
+           `treatment first: the HST was likely already remitted.`,
+    chase: `<b>Call these.</b> The customer never came back, and the invoice is either large (\u2265 $2,000) or `+
+           `recent enough to still collect (under 2 years). Ring them before writing anything off — a business `+
+           `will have records either way. Print this as your call list.`,
+    writeoff: `<b>Write-off candidates.</b> Never returned, over 2 years old and under $2,000 each. Too small and `+
+           `too cold to chase — book them as bad debt with your bookkeeper rather than closing them as paid.`,
+    review: `<b>Spot-check.</b> The customer came back once or twice. Check a handful against the pattern in the `+
+           `safe list; if they look the same, close them too.`,
+    keep: `<b>Leave these open.</b> Either Workshop Software still carries a real account balance, or the invoice `+
+           `is under a year old and may genuinely be unpaid.`,
+    all: `<b>Everything carrying a balance.</b> Use the tier filter to work one group at a time.`
+  };
+  $('#cNote').innerHTML = (NOTES[tier]||'') +
+    ` <i>The app never writes to Workshop Software — close invoices there, then tick them here `+
+    `(ticks are stored in this browser only).</i>`;
 
+  $('#cPrintTitle').textContent = tier === 'chase'
+    ? 'TIREPlus Orleans — Outstanding Balance Call List'
+    : 'TIREPlus Orleans — Stale Invoice Cleanup Worklist';
   $('#cPrintMeta').textContent =
     `${list.length} invoices · ${money(list.reduce((s,c)=>s+c.v.balance,0))} · tier: ` +
-    ({close:'safe to close', review:'review first', keep:'keep open', all:'all with a balance'})[tier] +
+    ({close:'safe to close', chase:'chase — call list', writeoff:'write off',
+      review:'spot-check', keep:'keep open', all:'all with a balance'})[tier] +
     (q ? ` · filtered by "${q}"` : '') +
     ` · data to ${fmtDate(DATA_END)} · printed ${fmtDate(new Date().toISOString().slice(0,10))}`;
 
   $('#cBody').innerHTML = list.map(c => `<tr class="${closedOff.has(c.key)?'done':''}" data-key="${esc(c.key)}" data-idx="${c.v._idx}">
       <td class="tick"><input type="checkbox" ${closedOff.has(c.key)?'checked':''}></td>
-      <td>${fmtDate(c.v.date)}</td><td>${esc(c.v.job)}</td><td>${esc(c.v.inv==null?'':c.v.inv)}</td>
-      <td>${esc(c.v.name)}</td><td class="r">${money(c.v.balance)}</td>
+      <td>${fmtDate(c.v.date)}</td><td>${esc(c.v.job)}</td>
+      <td>${esc(c.v.name)}${c.business?' <span class="biz">business</span>':''}</td>
+      <td>${esc(c.phone)}</td><td class="why">${esc(c.v.desc||'')}</td>
+      <td class="r">${money(c.v.balance)}</td>
       <td>${(c.age/365).toFixed(1)} yr</td><td class="why">${esc(c.why)}</td>
     </tr>`).join('');
   $('#cEmpty').hidden = list.length > 0;
 
   const bar = $('#cTierBar');
-  if (bar) bar.innerHTML =
-    `<div class="t-close">Safe to close: ${counts.close} · ${money(sums.close)}</div>`+
-    `<div class="t-review">Review first: ${counts.review} · ${money(sums.review)}</div>`+
-    `<div class="t-keep">Keep open: ${counts.keep} · ${money(sums.keep)}</div>`;
+  const LBL = {close:'Safe to close', chase:'Chase', writeoff:'Write off', review:'Spot-check', keep:'Keep open'};
+  if (bar) bar.innerHTML = TIERS.map(t =>
+    `<div class="t-${t}">${LBL[t]}: ${counts[t]} · ${money(sums[t])}</div>`).join('');
 }
 
 /* ================= Routing / view switching ================= */
@@ -1399,12 +1440,13 @@ $('#cBody').addEventListener('click', e=>{
 });
 $('#btnExportClean').addEventListener('click', ()=>{
   const cell = x => '"' + String(x==null?'':x).replace(/"/g,'""') + '"';
-  const head = ['Closed off','Date','Job #','Invoice #','Customer','Balance','Age (years)','Tier','Why'];
+  const head = ['Done','Date','Job #','Invoice #','Customer','Business','Phone','Job','Balance','Age (years)','Tier','Why'];
   const lines = [head.map(cell).join(',')];
   for (const tr of $('#cBody').querySelectorAll('tr[data-key]')){
     const c = buildCleanup().find(x=>x.key===tr.dataset.key);
     lines.push([closedOff.has(c.key)?'yes':'', fmtDate(c.v.date), c.v.job, c.v.inv==null?'':c.v.inv,
-      c.v.name, c.v.balance.toFixed(2), (c.age/365).toFixed(1), c.tier, c.why].map(cell).join(','));
+      c.v.name, c.business?'yes':'', c.phone, c.v.desc||'', c.v.balance.toFixed(2),
+      (c.age/365).toFixed(1), c.tier, c.why].map(cell).join(','));
   }
   const blob = new Blob(['\ufeff'+lines.join('\r\n')], {type:'text/csv;charset=utf-8'});
   const a = document.createElement('a');

@@ -63,10 +63,15 @@ invoice, and makes phone numbers, emails and VINs searchable.
 
 **Invoice Cleanup** (header tab) turns the stale open invoices into a
 worklist for closing them off in Workshop Software. Every invoice carrying a
-balance is tiered: **Safe to close** ($0 account balance, over a year old,
-under $500, no tires on the racks), **Review first** (large amounts or
-customers whose tires you hold) and **Keep open** (a real account balance, or
-under a year old). Each row explains its reasoning, ticks off as you close it
+balance is tiered by what the history actually shows:
+
+| Tier | Rule |
+|---|---|
+| **Safe to close** | tiny and stale, or the customer returned and paid 3+ times since |
+| **Chase** | never returned, and either ≥ $2,000 or under 2 years old — printable as a **call list** with phone numbers |
+| **Write off** | never returned, over 2 years old and under $2,000 — bad debt, not "paid" |
+| **Spot-check** | returned only once or twice — check a few against the safe pattern |
+| **Keep open** | a real account balance, or under a year old | Each row explains its reasoning, ticks off as you close it
 in WSS (ticks persist in that browser), and the list prints landscape with
 tick boxes or exports to CSV. The app never writes to Workshop Software.
 
