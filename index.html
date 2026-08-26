@@ -72,7 +72,7 @@
   .st{-webkit-print-color-adjust:exact;print-color-adjust:exact}
   .toolbar .printbtn{background:var(--brand-blue);border-color:var(--brand-blue);color:#fff;font-weight:bold}
   .toolbar .printbtn:hover{background:#1f2c73}
-  .print-only{display:none}
+  .print-only{display:none !important}
   .print-head{display:flex;gap:10pt;align-items:center;margin:0 0 9pt}
   .print-head img{width:36pt;height:36pt}
   .print-head .t{font-size:14pt;font-weight:bold}
@@ -80,6 +80,14 @@
   #rackView table.list td.tires{white-space:normal;max-width:420px;font-size:14px}
   #rackView tr.rack-open td{color:#999;font-style:italic;background:#fafafa}
   #rackView tr.rack-open{cursor:default}
+  .note-box{margin:0 18px 12px;background:#fff8e1;border:1px solid #e3d190;border-radius:8px;
+    padding:10px 14px;font-size:14.5px;line-height:1.5;color:#5c5330}
+  .note-box b{color:#7a5c00}
+  .owe{display:inline-block;padding:1px 8px;border-radius:9px;font-size:12.5px;font-weight:bold;
+    background:#ffd9d9;color:#a11212;margin-left:8px;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+  .owe.soft{background:#f0e6e6;color:#7a5555}
+  #balView td.amt-strong{font-weight:bold;color:#a11212}
+  #balView td.amt-soft{color:#888}
 
   /* ---------- Invoice view chrome ---------- */
   .inv-toolbar{display:flex;gap:8px;align-items:center;padding:10px 18px;background:#fff;border-bottom:1px solid var(--line);position:sticky;top:0;z-index:5}
@@ -164,7 +172,7 @@
     table.items tr.sectotal,table.items tr.sec{page-break-inside:avoid}
     .totals{page-break-inside:avoid}
     /* --- tire storage list as a clean report --- */
-    .print-only{display:block !important}
+    .print-only{display:flex !important}
     #storageView{padding:8mm 8mm 10mm}
     #storageView .list-wrap{overflow:visible;padding:0}
     #storageView table.list{box-shadow:none;font-size:9.5pt}
@@ -186,6 +194,14 @@
     #rackView table.list td{padding:3pt 4pt;white-space:normal;max-width:none;
       border-bottom:0.5pt solid #aaa;word-wrap:break-word}
     #rackView table.list tr{page-break-inside:avoid}
+    #balView{padding:8mm 8mm 10mm}
+    #balView .list-wrap{overflow:visible;padding:0}
+    #balView table.list{box-shadow:none;font-size:9pt}
+    #balView table.list thead{display:table-header-group}
+    #balView table.list th{position:static;background:#fff !important;color:#000;
+      border-bottom:1.5pt solid #000;font-size:9pt;padding:4pt 5pt}
+    #balView table.list td{padding:3pt 5pt;white-space:normal;max-width:none;border-bottom:0.5pt solid #aaa}
+    #balView table.list tr{page-break-inside:avoid}
   }
   @media (max-width:840px){ .sheet{transform-origin:top left;} }
 </style>
@@ -200,6 +216,7 @@
     <a href="#" id="navInv">Invoices</a>
     <a href="#/storage" id="navStor">Tire Storage</a>
     <a href="#/racks" id="navRack">Rack Inventory</a>
+    <a href="#/balances" id="navBal">Balances</a>
   </nav>
   <div class="sub" id="headerStats"></div>
 </header>
@@ -303,11 +320,48 @@
     <table class="list">
       <thead><tr>
         <th>Slot</th><th>Customer</th><th>Plate</th><th>Vehicle</th>
-        <th>Tires on the rack</th><th>Rims</th><th>Last swap</th><th>Billing</th>
+        <th>Tires on the rack</th><th>Rims</th><th>Last swap</th><th>Billing</th><th>Owes</th>
       </tr></thead>
       <tbody id="rBody"></tbody>
     </table>
     <div class="empty" id="rEmpty" hidden>No rack slots match.</div>
+  </div>
+</section>
+
+<!-- ============ BALANCES VIEW ============ -->
+<section id="balView" hidden>
+  <div class="toolbar no-print">
+    <input type="search" id="bq" placeholder="Search customers with a balance…">
+    <label>Show
+      <select id="bFilter">
+        <option value="confirmed">Confirmed only (account balance &gt; $0)</option>
+        <option value="all">All open invoices</option>
+        <option value="rack">With tires on the racks</option>
+        <option value="recent">Newest invoice under 1 year</option>
+      </select>
+    </label>
+    <button id="btnPrintBal" class="printbtn">&#128424; Print list</button>
+    <button id="btnExportBal">Export CSV</button>
+  </div>
+  <div class="print-head print-only">
+    <img src="assets/logo.png" alt="">
+    <div>
+      <div class="t">TIREPlus Orleans — Outstanding Balances</div>
+      <div class="m" id="bPrintMeta"></div>
+    </div>
+  </div>
+  <div class="summary no-print" id="bSummary"></div>
+  <div class="note-box no-print" id="bNote"></div>
+  <div class="list-wrap">
+    <table class="list">
+      <thead><tr>
+        <th>Customer</th><th>Phone</th><th class="r">Account balance</th>
+        <th class="r">Open invoices</th><th class="r">Inv</th>
+        <th>Oldest</th><th>Newest</th><th>Age</th><th>Tires on rack</th>
+      </tr></thead>
+      <tbody id="bBody"></tbody>
+    </table>
+    <div class="empty" id="bEmpty" hidden>No customers match.</div>
   </div>
 </section>
 
@@ -709,6 +763,50 @@ const slotsByCust = new Map();
   }
 }
 
+/* ================= Outstanding balances =================
+   Two independent figures, deliberately shown side by side:
+   - "Open invoices": sum of balance_due on the customer's invoices.
+   - "Account balance": the balance Workshop Software keeps on the customer
+     record — the figure that is updated when payments are applied.
+   They disagree a lot: most old open invoices were paid but never closed,
+   so an account balance of $0 behind a large open-invoice total means the
+   debt is almost certainly stale rather than real. */
+const DATA_END = INVOICES.reduce((m,v)=> v.date>m ? v.date : m, '');
+const daysAgo = d => Math.round((new Date(DATA_END) - new Date(d)) / 86400000);
+const acctBalByCust = new Map(CUSTOMERS.map(c=>[normName(c.name), c.bal||0]));
+let BALANCES = null;
+function buildBalances(){
+  if (BALANCES) return BALANCES;
+  const by = new Map();
+  for (const v of INVOICES){
+    if (!(v.balance > 0.004)) continue;
+    const k = normName(v.name);
+    let g = by.get(k);
+    if (!g) by.set(k, g={key:k, name:v.name, open:0, invs:[], oldest:v.date, newest:v.date});
+    g.open = r2(g.open + v.balance);
+    g.invs.push(v);
+    if (v.date < g.oldest) g.oldest = v.date;
+    if (v.date > g.newest) g.newest = v.date;
+  }
+  BALANCES = [...by.values()];
+  for (const g of BALANCES){
+    g.acct = r2(acctBalByCust.get(g.key) || 0);
+    g.ageDays = daysAgo(g.newest);
+    g.slots = slotsByCust.get(g.key) || [];
+    const c = custByName.get(g.name);
+    g.phone = c && c.phone ? fmtPhone(c.phone) : '';
+    // confirmed when the customer record still carries a balance
+    g.confirmed = Math.abs(g.acct) > 0.004;
+    g.bucket = g.ageDays<=30 ? '0-30' : g.ageDays<=60 ? '31-60'
+             : g.ageDays<=90 ? '61-90' : g.ageDays<=365 ? '91-365' : '>1yr';
+  }
+  BALANCES.sort((a,b)=> b.open - a.open);
+  return BALANCES;
+}
+const owesByCust = () => { const m=new Map(); for (const g of buildBalances()) m.set(g.key,g); return m; };
+let _owes = null;
+const owesFor = k => (_owes || (_owes = owesByCust())).get(k);
+
 /* ================= Tire storage history ================= */
 const SWAP_CODES = new Set(['SVC-TIRESNOR','SVC-TIRESOR','TIRE_NOR','TIRE_NOR_NC','TIRE_OR',
                             'TIRE_NOR19+','TIRE_OR19+','TIRE_TRUCK_NOR','TIRE_TRUCK_OR']);
@@ -743,7 +841,6 @@ function tyreFor(plate, name){
   const r = a.find(x=>x.name===name) || a[0];
   return r.tyre || '';
 }
-const DATA_END = INVOICES.reduce((m,v)=> v.date>m ? v.date : m, '');
 const monthsBetween = (a,b) => Math.max(0, Math.floor((new Date(b)-new Date(a))/(1000*60*60*24*30.44)));
 function renderStorage(){
   const {rows, swaps} = buildStorage();
@@ -817,7 +914,9 @@ function renderStorage(){
       : g.status==='aband'  ? `<span class="st st-aband">Possibly abandoned &middot; ${g.months} mo</span>`
       : g.status==='closed' ? `<span class="st st-closed">Closed out</span>`
       : `<span class="st st-active">Active</span>`;
-    html += `<tr class="cust-hdr"><td colspan="8">${esc(g.name)} ${stChip}
+    const ow = owesFor(normName(g.name));
+    const oweChip = ow ? `<span class="owe${ow.confirmed?'':' soft'}">Owes ${money(ow.confirmed?ow.acct:ow.open)}${ow.confirmed?'':' (unconfirmed)'}</span>` : '';
+    html += `<tr class="cust-hdr"><td colspan="8">${esc(g.name)} ${stChip}${oweChip}
       <span class="meta">${vehTxt}${vehTxt?' &middot; ':''}${g.nStor} storage charge${g.nStor===1?'':'s'}
       &middot; ${money(g.storTotal)} &middot; last activity ${fmtDate(g.lastTrue)}</span></td></tr>`;
     for (const r of g.rows){
@@ -867,6 +966,7 @@ function renderRacks(){
     `<span><b>${occ}</b> sets on the racks</span>`+
     `<span><b>${free}</b> open spots</span>`+
     `<span style="color:#a11212"><b>${nUnbilled}</b> not billed for storage</span>`+
+    `<span style="color:#a11212"><b>${list.filter(r=>!r.open && owesFor(r._cust)).length}</b> owe money</span>`+
     `<span>Counted ${esc(INV_PACK.countDate)} &middot; ${esc(INV_PACK.scope)}</span>`;
   $('#rPrintMeta').textContent =
     `${occ} sets on the racks · ${free} open spots · ${nUnbilled} not billed for storage` +
@@ -875,14 +975,16 @@ function renderRacks(){
     ` · counted ${INV_PACK.countDate} · printed ${fmtDate(new Date().toISOString().slice(0,10))}`;
 
   $('#rBody').innerHTML = list.map(r => {
-    if (r.open) return `<tr class="rack-open"><td>${esc(r.loc)}</td><td colspan="7">— open spot —</td></tr>`;
+    if (r.open) return `<tr class="rack-open"><td>${esc(r.loc)}</td><td colspan="8">— open spot —</td></tr>`;
     const bill = r.billed ? `<span class="st st-active">Billed</span>`
                           : `<span class="st st-aband">Not billed</span>`;
+    const ow = owesFor(r._cust);
+    const owe = ow ? `<span class="owe${ow.confirmed?'':' soft'}">${money(ow.confirmed?ow.acct:ow.open)}${ow.confirmed?'':'?'}</span>` : '';
     return `<tr${r._idxInv!=null?` data-idx="${r._idxInv}"`:''}>
       <td>${esc(r.loc)}</td><td>${esc(r.name)}</td><td>${esc(r.plate)}</td>
       <td>${esc(r.vehicle)}</td><td class="tires">${esc(r.tires)}${r.note?` <i>(${esc(r.note)})</i>`:''}</td>
       <td>${esc(r.rims)}</td><td>${esc(r.lastSwap && r.lastSwap!=='?' ? fmtDate(r.lastSwap) : (r.lastSwap||''))}</td>
-      <td>${bill}</td></tr>`;
+      <td>${bill}</td><td>${owe}</td></tr>`;
   }).join('');
   $('#rEmpty').hidden = list.length > 0;
 }
@@ -895,6 +997,51 @@ function rows_storage_customers(){
   return _storCusts;
 }
 
+function renderBalances(){
+  const all = buildBalances();
+  const q = $('#bq').value.trim().toLowerCase();
+  const mode = $('#bFilter').value;
+  let list = all.slice();
+  if (mode === 'confirmed') list = list.filter(g=>g.confirmed);
+  else if (mode === 'rack') list = list.filter(g=>g.slots.length);
+  else if (mode === 'recent') list = list.filter(g=>g.ageDays <= 365);
+  if (q) list = list.filter(g => (g.name+' '+g.phone).toLowerCase().includes(q));
+
+  const sumOpen = list.reduce((s,g)=>s+g.open,0), sumAcct = list.reduce((s,g)=>s+g.acct,0);
+  const nRack = list.filter(g=>g.slots.length).length;
+  $('#bSummary').innerHTML =
+    `<span><b>${list.length}</b> customers</span>`+
+    `<span>Account balances: <b>${money(sumAcct)}</b></span>`+
+    `<span>Open invoices: <b>${money(sumOpen)}</b></span>`+
+    (nRack ? `<span style="color:#a11212"><b>${nRack}</b> have tires on the racks</span>` : '')+
+    `<span>Click a row to see their invoices.</span>`;
+
+  const stale = all.filter(g=>!g.confirmed && g.ageDays>365);
+  $('#bNote').innerHTML =
+    `<b>Two figures, on purpose.</b> <b>Account balance</b> is what Workshop Software still carries on the `+
+    `customer record after payments — treat it as what is really owed. <b>Open invoices</b> adds up `+
+    `invoices never marked closed. ${stale.length} customers (${money(stale.reduce((s,g)=>s+g.open,0))}) `+
+    `show open invoices older than a year with a $0 account balance — almost certainly paid but never `+
+    `closed off, the same recording gap seen with the storage tires.`;
+
+  $('#bPrintMeta').textContent =
+    `${list.length} customers · account balances ${money(sumAcct)} · open invoices ${money(sumOpen)}` +
+    ` · ${({confirmed:'confirmed only',all:'all open invoices',rack:'with tires on the racks',recent:'newest invoice under 1 year'})[mode]}` +
+    (q ? ` · filtered by "${q}"` : '') +
+    ` · data to ${fmtDate(DATA_END)} · printed ${fmtDate(new Date().toISOString().slice(0,10))}`;
+
+  $('#bBody').innerHTML = list.map(g => `<tr data-cust="${esc(g.key)}">
+      <td>${esc(g.name)}</td><td>${esc(g.phone)}</td>
+      <td class="r ${g.confirmed?'amt-strong':'amt-soft'}">${g.confirmed?money(g.acct):'$0.00'}</td>
+      <td class="r ${g.confirmed?'':'amt-soft'}">${money(g.open)}</td>
+      <td class="r">${g.invs.length}</td>
+      <td>${fmtDate(g.oldest)}</td><td>${fmtDate(g.newest)}</td>
+      <td>${g.bucket}</td>
+      <td>${g.slots.length ? `<span class="owe">${esc(g.slots.map(s=>s.loc).join(', '))}</span>` : ''}</td>
+    </tr>`).join('');
+  $('#bEmpty').hidden = list.length > 0;
+}
+
 /* ================= Routing / view switching ================= */
 let currentIdx = null;
 let returnHash = '';                 // where Back leads from the invoice view
@@ -902,8 +1049,10 @@ function setNav(which){
   $('#navInv').classList.toggle('active', which==='inv');
   $('#navStor').classList.toggle('active', which==='stor');
   $('#navRack').classList.toggle('active', which==='rack');
+  $('#navBal').classList.toggle('active', which==='bal');
 }
 function showList(){
+  $('#balView').hidden = true;
   $('#invView').hidden = true;
   $('#storageView').hidden = true;
   $('#rackView').hidden = true;
@@ -913,6 +1062,7 @@ function showList(){
   document.title = 'TIREPlus Orleans — Invoice History';
 }
 function showStorage(){
+  $('#balView').hidden = true;
   $('#invView').hidden = true;
   $('#listView').hidden = true;
   $('#rackView').hidden = true;
@@ -934,10 +1084,12 @@ function showInvoice(idx){
   $('#listView').hidden = true;
   $('#storageView').hidden = true;
   $('#rackView').hidden = true;
+  $('#balView').hidden = true;
   $('#invView').hidden = false;
   window.scrollTo(0,0);
 }
 function showRacks(){
+  $('#balView').hidden = true;
   $('#invView').hidden = true;
   $('#listView').hidden = true;
   $('#storageView').hidden = true;
@@ -947,11 +1099,23 @@ function showRacks(){
   renderRacks();
   document.title = 'TIREPlus Orleans — Tire Rack Inventory';
 }
+function showBalances(){
+  $('#invView').hidden = true;
+  $('#listView').hidden = true;
+  $('#storageView').hidden = true;
+  $('#rackView').hidden = true;
+  $('#balView').hidden = false;
+  returnHash = '#/balances';
+  setNav('bal');
+  renderBalances();
+  document.title = 'TIREPlus Orleans — Outstanding Balances';
+}
 function route(){
   const m = /^#\/i\/(\d+)$/.exec(location.hash);
   if (m) showInvoice(+m[1]);
   else if (location.hash === '#/storage') showStorage();
   else if (location.hash === '#/racks') showRacks();
+  else if (location.hash === '#/balances') showBalances();
   else showList();
 }
 window.addEventListener('hashchange', route);
@@ -1013,7 +1177,7 @@ $('#sq').addEventListener('input', ()=>{ clearTimeout(sqTimer); sqTimer=setTimeo
 $('#sSwaps').addEventListener('change', renderStorage);
 function setPageOrientation(){
   // storage list prints landscape; invoices keep portrait A4
-  const landscape = !$('#storageView').hidden || !$('#rackView').hidden;
+  const landscape = !$('#storageView').hidden || !$('#rackView').hidden || !$('#balView').hidden;
   document.getElementById('pageOrient').textContent = landscape ? '@page{size:A4 landscape}' : '';
 }
 window.addEventListener('beforeprint', setPageOrientation);
@@ -1025,6 +1189,35 @@ $('#rq').addEventListener('input', ()=>{ clearTimeout(rqTimer); rqTimer=setTimeo
 $('#rCont').addEventListener('change', renderRacks);
 $('#rUnbilled').addEventListener('change', renderRacks);
 $('#btnPrintRack').addEventListener('click', ()=>{ setPageOrientation(); window.print(); });
+let bqTimer;
+$('#bq').addEventListener('input', ()=>{ clearTimeout(bqTimer); bqTimer=setTimeout(renderBalances,150); });
+$('#bFilter').addEventListener('change', renderBalances);
+$('#btnPrintBal').addEventListener('click', ()=>{ setPageOrientation(); window.print(); });
+$('#bBody').addEventListener('click', e=>{
+  const tr = e.target.closest('tr[data-cust]'); if(!tr) return;
+  const g = buildBalances().find(x=>x.key===tr.dataset.cust);
+  if (!g) return;
+  state.q = g.name; $('#q').value = g.name;      // show their invoices in the list view
+  state.type=''; state.status=''; state.refs=''; state.from=''; state.to='';
+  $('#fType').value=''; $('#fStatus').value=''; $('#fRefs').value=''; $('#fFrom').value=''; $('#fTo').value='';
+  applyFilters();
+  location.hash = '';
+});
+$('#btnExportBal').addEventListener('click', ()=>{
+  const cell = x => '"' + String(x==null?'':x).replace(/"/g,'""') + '"';
+  const head = ['Customer','Phone','Account balance','Open invoices','Invoices','Oldest','Newest','Age','Tires on rack'];
+  const lines = [head.map(cell).join(',')];
+  for (const tr of $('#bBody').querySelectorAll('tr[data-cust]')){
+    const g = buildBalances().find(x=>x.key===tr.dataset.cust);
+    lines.push([g.name, g.phone, g.acct.toFixed(2), g.open.toFixed(2), g.invs.length,
+                fmtDate(g.oldest), fmtDate(g.newest), g.bucket, g.slots.map(s=>s.loc).join(' ')].map(cell).join(','));
+  }
+  const blob = new Blob(['\ufeff'+lines.join('\r\n')], {type:'text/csv;charset=utf-8'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'TIREPlus_balances_' + new Date().toISOString().slice(0,10).replace(/-/g,'') + '.csv';
+  a.click(); setTimeout(()=>URL.revokeObjectURL(a.href), 5000);
+});
 $('#sBody').addEventListener('click', e=>{
   const tr = e.target.closest('tr[data-idx]'); if(!tr) return;
   location.hash = '#/i/'+tr.dataset.idx;

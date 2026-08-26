@@ -18,7 +18,7 @@ INV_COLS = ["job","inv","type","status","date","name","plate","desc","total",
             "suburb","postcode","make","model","buildDate","bodyType","odometer",
             "note","jobNote"]
 ITEM_COLS = ["job","code","desc","qty","unitPrice","gst","amount","sub","ptype","ordering","bom","note"]
-CUST_COLS = ["name","phone","email","addr1","addr2","suburb","state","postcode"]
+CUST_COLS = ["name","phone","email","addr1","addr2","suburb","state","postcode","bal"]
 VEH_COLS  = ["plate","name","vin","next","tyre"]
 
 
@@ -84,7 +84,7 @@ def convert(inv_csv, item_csv, out_dir, cust_csv=None, veh_csv=None):
                 continue
             row = [name, s(r["mobile"]) or s(r["phone"]), s(r["email"]),
                    s(r["address1"]), s(r["address2"]), s(r["suburb"]),
-                   s(r["state"]), s(r["postcode"])]
+                   s(r["state"]), s(r["postcode"]), num(r["balance"]) or 0]
             score = sum(1 for x in row[1:] if x)
             if name not in best or score > best[name][0]:
                 best[name] = (score, row)

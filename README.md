@@ -53,13 +53,21 @@ over `file://` — nothing is uploaded anywhere.
 |---|---|
 | `data/invoices.js` | 12,229 invoices / quotes / credits (Mar 2023 – Aug 2026) |
 | `data/items.js` | 70,981 invoice line items |
-| `data/customers.js` | 4,688 customers (phone, email, address) |
+| `data/customers.js` | 4,688 customers (phone, email, address, account balance) |
 | `data/vehicles.js` | 5,255 vehicles (VIN, next service date, tire size) |
 | `data/inventory.js` | physical tire-rack stocktake — 48 slots, 44 occupied |
 
 Customers are joined to invoices by display name and vehicles by plate, which
 fills in the phone, address, VIN and next-service fields on the printed
 invoice, and makes phone numbers, emails and VINs searchable.
+
+**Balances** (header tab) flags customers who still owe money, showing two
+figures side by side: the **account balance** Workshop Software keeps on the
+customer record (what is really owed, updated as payments are applied) and the
+total of **open invoices** (invoices never marked closed). Filter to confirmed
+balances, all open invoices, customers whose tires are on the racks, or recent
+debt only; sortable, printable landscape and exportable to CSV. Customers with
+a balance are also flagged in the Tire Storage and Rack Inventory views.
 
 **Rack Inventory** (header tab) lists the physical stocktake slot by slot —
 customer, plate, vehicle, tires, rims, last swap — flags each set as
