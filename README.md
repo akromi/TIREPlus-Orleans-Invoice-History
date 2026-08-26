@@ -67,11 +67,16 @@ balance is tiered by what the history actually shows:
 
 | Tier | Rule |
 |---|---|
-| **Safe to close** | tiny and stale, or the customer returned and paid 3+ times since |
-| **Chase** | never returned, and either ≥ $2,000 or under 2 years old — printable as a **call list** with phone numbers |
-| **Write off** | never returned, over 2 years old and under $2,000 — bad debt, not "paid" |
-| **Spot-check** | returned only once or twice — check a few against the safe pattern |
-| **Keep open** | a real account balance, or under a year old | Each row explains its reasoning, ticks off as you close it
+| **Quotes left as invoices** | no invoice number was ever issued — never invoiced, so not a receivable; revert the type to Quote (or void) in WSS |
+| **Chase** | a real numbered invoice, over a year old and ≥ $500 or under 2 years — printable as a **call list** with phone numbers |
+| **Write off** | a real invoice, over 2 years old and under $500 — bad debt |
+| **Current** | a real invoice under a year old — normal receivable |
+
+Workshop Software only issues an invoice number when an invoice is actually
+raised, so its presence is what separates real money owed from a quote that was
+switched to type Invoice. Two independent fields confirm the split: the
+numbered invoices carrying a balance total $15,472.92, matching the customer
+account balances to the cent for all 43 customers. Each row explains its reasoning, ticks off as you close it
 in WSS (ticks persist in that browser), and the list prints landscape with
 tick boxes or exports to CSV. The app never writes to Workshop Software.
 
