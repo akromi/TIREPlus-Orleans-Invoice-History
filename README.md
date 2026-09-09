@@ -51,7 +51,7 @@ over `file://` — nothing is uploaded anywhere.
 
 | File | Contents |
 |---|---|
-| `data/invoices.js` | 12,229 invoices / quotes / credits (Mar 2023 – Aug 2026) |
+| `data/invoices.js` | 12,348 invoices / quotes / credits (Jan 2023 – Sep 2026) |
 | `data/items.js` | 70,981 invoice line items |
 | `data/customers.js` | 4,688 customers (phone, email, address, account balance) |
 | `data/vehicles.js` | 5,255 vehicles (VIN, next service date, tire size) |
@@ -96,6 +96,12 @@ customer, plate, vehicle, tires, rims, last swap — flags each set as
 **Billed**/**Not billed** for storage, filters by container or unbilled only,
 and prints landscape. After a new stocktake, update `tools/inventory_rows.py`
 and run `python3 tools/convert_inventory.py data`.
+
+Each generated file records the export it came from and the newest invoice it
+covers. Refresh all four together: if the items export is older than the
+invoice export, the header says so and any invoice past the items cut-off shows
+a notice in place of its lines (its totals still come from the invoice record
+and remain correct).
 
 To refresh with newer Workshop Software exports, run:
 

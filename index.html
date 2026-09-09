@@ -174,6 +174,8 @@
   .foot-notes{margin-top:14pt;font-size:10pt;line-height:11.5pt;padding:0 10pt}
   .foot-notes p{margin:0 0 11.5pt}
   .sheet .pageno{position:absolute;bottom:9pt;right:18pt;font-size:8pt}
+  .items-missing{font-size:9pt;padding:12pt 10pt;margin-top:8pt;color:#7a5c00;background:#fff8e1;
+    border:0.75pt solid #e3d190;line-height:12pt;-webkit-print-color-adjust:exact;print-color-adjust:exact}
 
   /* ---------- Print ---------- */
   @page{size:A4;margin:0}
@@ -766,7 +768,18 @@ function renderInvoice(v){
     }
   }
   itemsHtml += '</table>';
-  if (!secs.length) itemsHtml += '<div style="font-size:10pt;padding:14pt 6pt;color:#555">No line items on this record.</div>';
+  if (!secs.length){
+    // a non-zero total means lines must exist, so their absence is a data gap
+    // (the items export is older than the invoice export) rather than an empty job
+    const gap = (v.total || 0) > 0.004;
+    itemsHtml += gap
+      ? `<div class="items-missing">Line items for this invoice are not in the loaded items export`
+        + ((window.TP_ITEMS && TP_ITEMS.meta && TP_ITEMS.meta.cutoff)
+            ? ` (which covers invoices up to ${fmtDate(TP_ITEMS.meta.cutoff)})` : '')
+        + `. Totals below are from the invoice record and are correct; re-export invoice items and re-run`
+        + ` tools/convert_csv.py to show the detail.</div>`
+      : '<div style="font-size:10pt;padding:14pt 6pt;color:#555">No line items on this record.</div>';
+  }
 
   let totRows = `<tr><td class="l">Subtotal / Sous-Total</td><td class="v">${money(v.subtotal)}</td></tr>`;
   if (v.discount) totRows += `<tr><td class="l">Discount / Remise</td><td class="v">-${money(v.discount).replace('-','')}</td></tr>`;
@@ -1535,9 +1548,13 @@ $('#sBody').addEventListener('click', e=>{
 /* header stats */
 (function(){
   const dates = INVOICES.map(v=>v.date).filter(Boolean).sort();
+  const im = (window.TP_ITEMS && window.TP_ITEMS.meta) || {};
+  const vm = (window.TP_INVOICES && window.TP_INVOICES.meta) || {};
+  const stale = im.cutoff && vm.cutoff && im.cutoff < vm.cutoff;
   $('#headerStats').innerHTML =
     `${INVOICES.length.toLocaleString()} records &middot; ${ITEMS.length.toLocaleString()} line items<br>`+
-    `${fmtDate(dates[0])} &ndash; ${fmtDate(dates[dates.length-1])}`;
+    `${fmtDate(dates[0])} &ndash; ${fmtDate(dates[dates.length-1])}` +
+    (stale ? `<br><span style="color:#ffd23f">line items only to ${fmtDate(im.cutoff)}</span>` : '');
 })();
 
 /* PWA: register service worker only when served over http(s) — file:// runs fine without it */
