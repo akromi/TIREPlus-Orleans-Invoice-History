@@ -17,6 +17,31 @@ over `file://` — nothing is uploaded anywhere.
 > Optional: if you host the folder on any web server it also works as an
 > installable PWA (offline-capable via `sw.js` + `manifest.json`).
 
+## Put it on the Windows taskbar
+
+The app runs from the file system, so browsers will not "install" it as a web
+app (that needs a web server). A browser **app-mode shortcut** gives the same
+result — its own window, no address bar, TIREPlus icon, pinnable:
+
+1. In the app folder, right-click `tools\Add-To-Taskbar.ps1` → **Run with PowerShell**.
+2. It creates **TIREPlus Invoice History** on your Desktop.
+3. Right-click that shortcut → (Windows 11: **Show more options** first) → **Pin to taskbar**.
+
+To do it by hand instead, create a shortcut with this target — one line, quotes
+included, adjusting the path to where you extracted the folder:
+
+```
+"C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe" --app="file:///C:/Users/YOU/TIREPlus-Orleans-Invoice-History/index.html"
+```
+
+then set its icon to `assets\tireplus.ico` and pin it. Chrome works the same
+way — swap in `chrome.exe`.
+
+> Prefer a real installed app (own icon in Start, offline cache)? Serve the
+> folder over http and Edge/Chrome will offer **Install**: run
+> `python -m http.server 8000` in the app folder and open
+> `http://localhost:8000`.
+
 ## Using the app
 
 - **Search** by customer, plate, job #, invoice #, vehicle, description,
