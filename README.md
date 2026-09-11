@@ -76,8 +76,8 @@ way — swap in `chrome.exe`.
 
 | File | Contents |
 |---|---|
-| `data/invoices.js` | 12,348 invoices / quotes / credits (Jan 2023 – Sep 2026) |
-| `data/items.js` | 70,981 invoice line items |
+| `data/invoices.js` | 12,350 invoices / quotes / credits (Jan 2023 – Sep 2026) |
+| `data/items.js` | 71,788 invoice line items |
 | `data/customers.js` | 4,688 customers (phone, email, address, account balance) |
 | `data/vehicles.js` | 5,255 vehicles (VIN, next service date, tire size) |
 | `data/inventory.js` | physical tire-rack stocktake — 48 slots, 44 occupied |
